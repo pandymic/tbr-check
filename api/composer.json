@@ -1,0 +1,13 @@
+{
+    "name": "pandymic/tbr-check-api",
+    "type": "project",
+    "require": {
+        "slim/slim": "3.*"
+    },
+    "authors": [
+        {
+            "name": "Michal Pandyra",
+            "email": "mike@pandymic.com"
+        }
+    ]
+}

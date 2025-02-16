@@ -1,5 +1,5 @@
 {
-  "name": "tbr-check",
+  "name": "pandymic/tbr-check",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
