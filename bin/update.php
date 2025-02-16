@@ -10,12 +10,9 @@ while( $wait > 0 ) {
 }
 print "\n\n";
 
-$time = time();
-
-$now = date( 'Y-m-d H:i:s', $time );
-$today = date( 'Y-m-d', $time );
-
 $config = include __DIR__ . '/../etc/config.php';
+$config->now = date( 'Y-m-d H:i:s', $config->time );
+$config->today = date( 'Y-m-d', $config->time );
 
 try {
 
@@ -28,27 +25,29 @@ try {
   $db = new PDO('mysql:host=' . $config->db->host . ';dbname=' . $config->db->name, $config->db->user, $config->db->pass);
   $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-  $selectStmt = $db->prepare('SELECT * FROM domains WHERE date_released >= :today AND date_removed IS NULL');
-  $selectStmt->bindParam(':today', $today);
+  $selectStmt = $db->prepare('SELECT * FROM domains WHERE date_tbr >= :today AND date_removed IS NULL');
+  $selectStmt->bindParam(':today', $config->today);
   $selectStmt->execute();
 
   $results = $selectStmt->fetchAll(PDO::FETCH_OBJ);
   $upcoming_domains = array_map( function( $row ) {
-    return (object)[ 'name' => $row->domain, 'date' => $row->date_released, 'id' => $row->id ];
+    return (object)[ 'name' => $row->domain, 'date' => $row->date_tbr, 'id' => $row->id ];
   }, $results );
 
-  $tbr_response = `lynx -dump https://www.cira.ca/en/wp-json/cira/v1/domains/tbr`;
+  $url = $config->tbrUrl;
+
+  $tbr_response = `lynx -dump $url`;
   $tbr_domains = json_decode( $tbr_response );
 
   // Prepare insert statement
-  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, date_released, date_added) VALUES (:domain, :date_released, :now)');
+  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, date_tbr, date_added) VALUES (:domain, :date_tbr, :now)');
   $insertStmt->bindParam(':domain', $domain);
-  $insertStmt->bindParam(':date_released', $date_released);
-  $insertStmt->bindParam(':now', $now );
+  $insertStmt->bindParam(':date_tbr', $date_tbr);
+  $insertStmt->bindParam(':now', $config->now );
 
   // Prepare update statement
   $updateStmt = $db->prepare('UPDATE domains SET date_removed = :now WHERE id = :id');
-  $updateStmt->bindParam(':now', $now);
+  $updateStmt->bindParam(':now', $config->now);
   $updateStmt->bindParam(':id', $id);
 
   // Add new domains
@@ -60,9 +59,9 @@ try {
     }
     // This code will only be reached if no $upcoming_domains match was found for the current $tbr_domain
     $domain = $tbr_domain->name;
-    $date_released = $tbr_domain->date;
+    $date_tbr = $tbr_domain->date;
     $insertStmt->execute();
-    $log->added[] = 'Added ' . $domain . ' - ' . $date_released;
+    $log->added[] = 'Added ' . $domain . ' - ' . $date_tbr;
   }
 
   // Remove outdated domains
