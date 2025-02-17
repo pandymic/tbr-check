@@ -31,19 +31,41 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
 
   $slim->get( '/domains', function( $request, $response, $args ) use ( $config ) {
 
-    $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed FROM domains WHERE date_tbr >= :today AND date_removed IS NULL AND domain NOT REGEXP "[\d-]" AND domain NOT REGEXP ".{10,}" ORDER BY date_added DESC, date_tbr ASC, domain ASC');
+    $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed, flag FROM domains WHERE date_tbr >= :today AND date_removed IS NULL AND domain NOT REGEXP "[0-9-]+" AND domain NOT REGEXP ".{10,}" ORDER BY date_added DESC, date_tbr ASC, domain ASC');
     $selectStmt->bindParam(':today', $config->today);
     $selectStmt->execute();
     $domainList = $selectStmt->fetchAll(PDO::FETCH_OBJ);
 
-    return $response->withJson( $domainList );
+    if ( is_array( $domainList ) ) {
+
+      for ( $i = 0, $i_count = count( $domainList ); $i < $i_count; $i++ ) {
+
+        $name = trim( preg_replace( '/\.ca$/', '', trim( strtolower( $domainList[ $i ]->name ) ) ) ); // Strip bullshit.
+
+        foreach ( $config->words as $word ) {
+          if ( false !== strpos( $name, $word ) ) {
+            if ( !isset( $domainList[ $i ]->words ) ) $domainList[ $i ]->words = [];
+            if ( !in_array( $word, $domainList[ $i ]->words ) ) $domainList[ $i ]->words[] = $word;
+          }
+        }
+        if ( isset( $domainList[ $i ]->words ) ) {
+          usort( $domainList[ $i ]->words, function( $a, $b ) {
+            return strlen( $b ) - strlen( $a );
+          } );
+        }
+
+      }
+
+      return $response->withJson( $domainList );
+    }
+    return $response->withStatus(404, 'Domains not found');
   } );
 
   $slim->get( '/domains/{id:[0-9]+}/words', function( $request, $response, $args ) use ( $config ) {
 
     $domainId = $args['id'];
 
-    $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed FROM domains WHERE id = :id');
+    $selectStmt = $config->db->prepare('SELECT id, domain as name FROM domains WHERE id = :id');
     $selectStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
     $selectStmt->execute();
     $domain = $selectStmt->fetch(PDO::FETCH_OBJ);
@@ -64,10 +86,6 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
         } );
       }
 
-      unset( $domain->tbr );
-      unset( $domain->added );
-      unset( $domain->removed );
-
       return $response->withJson( $domain );
     }
     return $response->withStatus(404, 'Domain not found');
@@ -81,7 +99,7 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
     switch ( $method ) {
       case 'GET':
 
-        $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed FROM domains WHERE id = :id');
+        $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed, flag FROM domains WHERE id = :id');
         $selectStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
         $selectStmt->execute();
         $domain = $selectStmt->fetch(PDO::FETCH_OBJ);
@@ -95,11 +113,12 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
         $parsedBody = $request->getParsedBody();
 
         if ( !empty( $parsedBody['name'] ) && !empty( $parsedBody['tbr'] )  ) {
-          $updateStmt = $config->db->prepare('UPDATE domains SET domain = :domain, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed WHERE id = :id');
+          $updateStmt = $config->db->prepare('UPDATE domains SET domain = :domain, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed, flag = :flag WHERE id = :id');
           $updateStmt->bindParam(':domain', $parsedBody['name']);
           $updateStmt->bindParam(':date_tbr', $parsedBody['tbr']);
-          $updateStmt->bindParam(':date_added', $config->now);
-          $updateStmt->bindParam(':date_removed', $parsedBody['removed'] ?? null);
+          $updateStmt->bindParam(':date_added', $parsedBody['added']);
+          $updateStmt->bindParam(':date_removed', $parsedBody['removed']);
+          $updateStmt->bindParam(':flag', $parsedBody['flag'], PDO::PARAM_INT); 
           $updateStmt->bindParam(':id', $domainId, PDO::PARAM_INT); 
           $updateStmt->execute();    
           return $response->withStatus(204); // 204 No Content on successful update
@@ -117,5 +136,11 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
   } );
 
 } );
+
+if ( preg_match( '/^192\.168\.16\.[\d]{1,3}$/', $_SERVER['REMOTE_ADDR'] ) ) {
+  header( 'Access-Control-Allow-Origin: *' );
+  header( 'Access-Control-Allow-Methods: *' );
+  header( 'Access-Control-Allow-Headers: *' );
+}
 
 $slim->run();
