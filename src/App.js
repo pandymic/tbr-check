@@ -52,11 +52,11 @@ function App() {
   } );
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterFlag, setFilterFlag] = useState( 'all' ); // null means show all
-  const [filterAdded, setFilterAdded] = useState( 'all' ); // null means show all
-  const [filterSession, setFilterSession] = useState( 'all' ); // null means show all
-  const [filterStatus, setFilterStatus] = useState( 'all' ); // null means show all
-  const [filterWordLength, setFilterWordLength] = useState( 'any' ); // null means show all
+  const [filterFlag, setFilterFlag] = useState( false );
+  const [filterAdded, setFilterAdded] = useState( 'all' );
+  const [filterSession, setFilterSession] = useState( 'all' );
+  const [filterStatus, setFilterStatus] = useState( 'all' );
+  const [filterWordLength, setFilterWordLength] = useState( 'any' );
 
   useEffect( () => {
 
@@ -84,6 +84,7 @@ function App() {
               <TableRow>
                 <TableHeaderCell 
                   verticalAlign="top"
+                  textAlign="center" 
                   sorted={ column === 'flag' ? direction : null } 
                   onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'flag' } ) }>Flag</TableHeaderCell>
                 <TableHeaderCell 
@@ -114,19 +115,14 @@ function App() {
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell>
-                  <Form.Dropdown
-                    options={[
-                      { key: 'all', text: 'All', value: 'all' },
-                      { key: 'flagged', text: '☑', value: 1 },
-                      { key: 'unflagged', text: '☐', value: 0 },
-                    ]}
-                    value={filterFlag}
-                    onChange={(e, { value }) => setFilterFlag(value)}
+                <TableCell textAlign="center" verticalAlign="middle">
+                  <Checkbox
+                    checked={filterFlag}
+                    onChange={(e, { checked }) => setFilterFlag( checked )}
                   />
                 </TableCell>
-                <TableCell></TableCell>
-                <TableCell>
+                <TableCell verticalAlign="middle"></TableCell>
+                <TableCell verticalAlign="middle">
                   <Form.Input
                     icon="search"
                     placeholder="Search..."
@@ -134,7 +130,7 @@ function App() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell verticalAlign="middle">
                   <Form.Dropdown
                     options={( () => {
                       const options = [ { key: 'all', text: 'All', value: 'all' } ];
@@ -149,7 +145,7 @@ function App() {
                     onChange={(e, { value }) => setFilterAdded(value)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell verticalAlign="middle">
                   <Form.Dropdown
                     options={( () => {
                       const options = [ { key: 'all', text: 'All', value: 'all' } ];
@@ -163,7 +159,7 @@ function App() {
                     onChange={(e, { value }) => setFilterSession(value)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell verticalAlign="middle">
                   <Form.Dropdown
                     options={[
                       { key: 'all', text: 'All', value: 'all' },
@@ -175,7 +171,7 @@ function App() {
                     onChange={(e, { value }) => setFilterStatus(value)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell verticalAlign="middle">
                   <Form.Dropdown
                     options={[
                       { key: 'any', text: 'Any Length', value: 'any' },
@@ -195,7 +191,7 @@ function App() {
                 if (searchQuery && !domain.name.toLowerCase().includes(searchQuery.toLowerCase())) {
                   return false;
                 }
-                if (filterFlag !== 'all' && domain.flag !== filterFlag) {
+                if (filterFlag !== false && domain.flag !== 1 ) {
                   return false;
                 }
                 if (filterAdded !== 'all' && 0 !== domain.added.indexOf( filterAdded )) {
@@ -229,7 +225,7 @@ function App() {
 
                 return (
                   <TableRow key={ domain.id }>
-                    <TableCell>
+                    <TableCell textAlign="center" verticalAlign="middle">
                       <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
 
                         const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
