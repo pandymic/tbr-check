@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useReducer } from 'react';
+import React, { useEffect, useReducer } from 'react';
 import { 
   Container,
   Table,
@@ -31,6 +31,11 @@ function TableReducer( state, action) {
         data: _.sortBy( state.data, [ action.column ] ),
         direction: 'ascending',
       }
+    case 'LOAD_DATA':
+      return {
+        ...state,
+        data: action.data
+      }
     default:
       throw new Error();
   }
@@ -38,7 +43,11 @@ function TableReducer( state, action) {
 
 function App() {
 
-  const [ domains, setDomains ] = useState( null );
+  const [ tableState, dispatch ] = useReducer( TableReducer, {
+    column: null,
+    data: null,
+    direction: null,
+  } );
 
   useEffect( () => {
 
@@ -47,30 +56,15 @@ function App() {
     } ).then( ( data ) => {
       if ( data ) {
         console.log( `Loaded from \`${domainsApi}/domains\`...` );
-        setDomains( data );
+        dispatch({ type: 'LOAD_DATA', data: data });
       }
     } ).catch( ( error ) => {
       console.error( error );
-      if ( !domains ) {
-        console.log( `Loaded from demo...` );
-        setDomains( JSON.parse( process.env.REACT_APP_DEMO_DATA ) );
-      }
+      console.log( `Loaded from demo...` );
+      dispatch({ type: 'LOAD_DATA', data: JSON.parse( process.env.REACT_APP_DEMO_DATA ) });
     } );
 
   }, [] ); // eslint-disable-line
-
-  const [ tableState, dispatch ] = useReducer( TableReducer, {
-    column: null,
-    data: domains,
-    direction: null,
-  } );
-
-  useEffect( () => {
-    console.log( 'Domains updated...' );
-    if ( domains ) {
-      tableState.data = domains;
-    }
-  }, [ domains ] ); // eslint-disable-line
 
   const { column, data, direction } = tableState;
 
@@ -108,17 +102,14 @@ function App() {
                   domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
                   ( <strong>{ domain.words[ 0 ] }</strong>),
                   domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
-                ]
-
-                console.log( domain.name, displayName );
-
+                ];
 
                 return (
                   <TableRow key={ domain.id }>
                     <TableCell>
-                      <Checkbox checked={ domain.flag } onChange={ ( event, data ) => {
+                      <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
 
-                        const domainUpdated = { ...domain, flag: data.checked ? 1 : 0 };
+                        const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
 
                         fetch(`${domainsApi}/domains/${domain.id}`, {
                           method: 'PUT',
@@ -130,20 +121,20 @@ function App() {
                           if (response.ok) {
 
                               console.log("Domain flag updated");
-                              setDomains( domains => domains.map(d => 
+                              dispatch({ type: 'LOAD_DATA', data: data.map( d => 
                                 d.id === domain.id ? domainUpdated : d
-                              ) );
+                              ) } );
                       
                           } else {
                             console.error("Failed to update domain flag:", response.status, response.statusText);
-                            data.checked = !data.checked; // Revert checkbox if update fails
+                            props.checked = !props.checked; // Revert checkbox if update fails
                           }
                         } ).catch(error => {
                           console.error("Error updating domain flag:", error);
-                          data.checked = !data.checked; // Revert checkbox on network error
+                          props.checked = !props.checked; // Revert checkbox on network error
                         } );
 
-                      } }toggle />
+                      } } />
                     </TableCell>
                     <TableCell>{ domain.id }</TableCell>
                     <TableCell>{ displayName }</TableCell>
