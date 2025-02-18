@@ -1,13 +1,14 @@
 #!/opt/remi/php82/root/bin/php
 <?php
 
-$wait = rand( 0, 300 );
+$waitIncrement = 10;
+$wait = rand( $waitIncrement, 300 );
 print 'Waiting ' . $wait . ' seconds…' . "\n";
-while( $wait > 0 ) {
+do {
   print '…';
-  sleep( 10 );
-  $wait = $wait - 10;
-}
+  $wait = $wait - $waitIncrement;
+  sleep( $wait < $waitIncrement ? $wait : $waitIncrement );
+} while( $wait > $waitIncrement );
 print "\n\n";
 
 $config = include __DIR__ . '/../etc/config.php';
@@ -48,7 +49,7 @@ try {
   // Prepare update statement
   $updateStmt = $db->prepare('UPDATE domains SET date_removed = :now WHERE id = :id');
   $updateStmt->bindParam(':now', $config->now);
-  $updateStmt->bindParam(':id', $id);
+  $updateStmt->bindParam(':id', $id, PDO::PARAM_INT);
 
   // Add new domains
   foreach ($tbr_domains as $tbr_domain) {
@@ -78,6 +79,68 @@ try {
     
     $log->removed[] = 'Removed ' . $upcoming_domain->name . ' - ' . $upcoming_domain->date;
   }
+
+  $url = $config->resultsUrl;
+
+  $results_response = `lynx -dump $url`;
+  $results = json_decode( $results_response );
+  if ( null !== $results && is_object( $results ) && isset( $results->releaseDate ) ) {
+
+    $releaseDate = new DateTime( $results->releaseDate );
+    $releaseDate->setTimezone( new DateTimeZone( date_default_timezone_get() ) );
+    $releaseDate = $releaseDate->format( 'Y-m-d H:i:s' );
+
+    $checkStmt = $db->prepare('SELECT 1 FROM results WHERE date_released = :date_released');
+    $checkStmt->bindParam(':date_released', $releaseDate );
+    $checkStmt->execute();
+
+    if ( !$checkStmt->fetchColumn() ) {
+
+      $numberOfDomainNames = (int)$results->numberOfDomainNames;
+
+      $insertStmt = $db->prepare('INSERT INTO results ( date_released, date_added, domains_count ) VALUES ( :date_released, :date_added, :domains_count )');
+      $insertStmt->bindParam(':date_released', $releaseDate );
+      $insertStmt->bindParam(':date_added', $config->now );
+      $insertStmt->bindParam(':domains_count', $numberOfDomainNames );
+      $insertStmt->execute();
+
+      $insertId = $db->lastInsertId();
+
+      if (isset($results->domains) && is_array($results->domains)) {
+        foreach ($results->domains as $domain) {
+            if (!isset($domain->domainName)) { // Check if domainName is set
+                error_log("domainName not set in results->domains. Skipping.");
+                continue;
+            }
+
+            try {
+                // Check if the domain already exists in the 'domains' table
+                $domainCheckStmt = $db->prepare('SELECT id FROM domains WHERE domain = :domain');
+                $domainCheckStmt->bindParam(':domain', $domain->domainName);
+                $domainCheckStmt->execute();
+
+                $domainId = $domainCheckStmt->fetchColumn();
+
+                if ($domainId) {
+                    // Domain exists, insert into 'results_to_domains'
+                    $linkInsertStmt = $db->prepare('INSERT INTO results_to_domains (results_id, domains_id) VALUES (:results_id, :domains_id)');
+                    $linkInsertStmt->bindParam(':results_id', $insertId, PDO::PARAM_INT);
+                    $linkInsertStmt->bindParam(':domains_id', $domainId, PDO::PARAM_INT);
+                    $linkInsertStmt->execute();
+                }
+
+            } catch (PDOException $e) {
+                error_log("Database error: " . $e->getMessage());  // Log the error for debugging
+            }
+        }
+      } else {
+        error_log("results->domains is not an array or is not set."); // Log if the domains data is not as expected.
+      }
+
+    }
+
+  }
+
   print 'Database updated successfully';
 } catch(PDOException $e) {
   print 'Error: ' . $e->getMessage();

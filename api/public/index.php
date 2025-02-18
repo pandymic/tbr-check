@@ -31,8 +31,7 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
 
   $slim->get( '/domains', function( $request, $response, $args ) use ( $config ) {
 
-    $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed, flag FROM domains WHERE date_tbr >= :today AND date_removed IS NULL AND domain NOT REGEXP "[0-9-]+" AND domain NOT REGEXP ".{10,}" ORDER BY date_added DESC, date_tbr ASC, domain ASC');
-    $selectStmt->bindParam(':today', $config->today);
+    $selectStmt = $config->db->prepare('SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.flag, r.date_released as auctioned FROM domains d LEFT JOIN results_to_domains r2d ON d.id = r2d.domains_id LEFT JOIN results r ON r2d.results_id = r.id WHERE d.domain NOT REGEXP "[0-9-]+" AND d.domain NOT REGEXP ".{10,}" ORDER BY d.date_removed ASC, d.date_added DESC, d.date_tbr ASC, d.domain ASC');
     $selectStmt->execute();
     $domainList = $selectStmt->fetchAll(PDO::FETCH_OBJ);
 
@@ -52,6 +51,16 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
           usort( $domainList[ $i ]->words, function( $a, $b ) {
             return strlen( $b ) - strlen( $a );
           } );
+        }
+
+        if ( null === $domainList[ $i ]->removed ) {
+          $domainList[ $i ]->status = 'To Be Released';
+        } else {
+          if ( null === $domainList[ $i ]->auctioned ) {
+            $domainList[ $i ]->status = 'Auctioned ' . $domainList[ $i ]->auctioned;
+          } else {
+            $domainList[ $i ]->status = 'Released ' . $domainList[ $i ]->removed;
+          }
         }
 
       }
