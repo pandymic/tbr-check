@@ -1,18 +1,21 @@
 import React, { useEffect, useReducer, useState } from 'react';
 import { 
   Container,
-  Divider,
   Table,
   TableRow,
   TableHeaderCell,
   TableHeader,
+  TableFooter,
   TableCell,
   TableBody,
   Checkbox,
+  Button,
   Form
 } from 'semantic-ui-react';
 import _ from 'lodash';
 import 'semantic-ui-css/semantic.min.css'
+import './App.css';
+
 
 const domainsApi = process.env.REACT_APP_BACKEND_API ?? '';
 
@@ -52,6 +55,7 @@ function App() {
   } );
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterNameLength, setFilterNameLength] = useState( 'any' );
   const [filterFlag, setFilterFlag] = useState( false );
   const [filterAdded, setFilterAdded] = useState( 'all' );
   const [filterSession, setFilterSession] = useState( 'all' );
@@ -74,9 +78,11 @@ function App() {
   }, [] ); // eslint-disable-line
 
   const { column, data, direction } = tableState;
+  
+  let domainsCount = data?.length ?? 0;
 
   return (
-    <Container className="App" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+    <Container className="App">
       {
         data && (
           <Table sortable celled>
@@ -84,13 +90,13 @@ function App() {
               <TableRow>
                 <TableHeaderCell 
                   verticalAlign="top"
+                  sorted={ column === 'id' ? direction : null } 
+                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'id' } ) }>ID</TableHeaderCell>
+                <TableHeaderCell 
+                  verticalAlign="top"
                   textAlign="center" 
                   sorted={ column === 'flag' ? direction : null } 
                   onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'flag' } ) }>Flag</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'id' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'id' } ) }>ID</TableHeaderCell>
                 <TableHeaderCell 
                   verticalAlign="top"
                   sorted={ column === 'name' ? direction : null } 
@@ -114,24 +120,59 @@ function App() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow>
+              <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form small filters">
+                <TableCell verticalAlign="middle">
+                  <Button basic content="Reset"
+                    size="small"
+                    onClick={ () => {
+                      setSearchQuery('');
+                      setFilterNameLength('any');
+                      setFilterFlag(false);
+                      setFilterAdded('all');
+                      setFilterSession('all');
+                      setFilterStatus('all');
+                      setFilterWordLength('any');
+                    } }
+                  />
+                </TableCell>
                 <TableCell textAlign="center" verticalAlign="middle">
                   <Checkbox
                     checked={filterFlag}
                     onChange={(e, { checked }) => setFilterFlag( checked )}
                   />
                 </TableCell>
-                <TableCell verticalAlign="middle"></TableCell>
                 <TableCell verticalAlign="middle">
-                  <Form.Input
-                    icon="search"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.78571429em' }}>
+                    <Form.Input
+                      size="small"
+                      icon="search"
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <Form.Dropdown
+                      wrapSelection={false}
+                      selection
+                      compact
+                      options={[
+                        { key: 'any', text: 'Any Length', value: 'any' },
+                        { key: '3', text: '3 Letters', value: '3' },
+                        { key: '3+', text: '3+ Letters', value: '3+' },
+                        { key: '4', text: '4 Letters', value: '4' },
+                        { key: '4+', text: '4+ Letters', value: '4+' },
+                        { key: '5', text: '5 Letters', value: '5' },
+                        { key: '5+', text: '5+ Letters', value: '5+' },
+                        { key: '6+', text: 'Over 5 Letters', value: '6+' },
+                      ]}
+                      value={filterNameLength}
+                      onChange={(e, { value }) => setFilterNameLength(value)}
+                    />
+                  </div>
                 </TableCell>
                 <TableCell verticalAlign="middle">
                   <Form.Dropdown
+                    selection
+                    fluid
                     options={( () => {
                       const options = [ { key: 'all', text: 'All', value: 'all' } ];
                       data.forEach( domain => {
@@ -147,6 +188,8 @@ function App() {
                 </TableCell>
                 <TableCell verticalAlign="middle">
                   <Form.Dropdown
+                    selection
+                    fluid
                     options={( () => {
                       const options = [ { key: 'all', text: 'All', value: 'all' } ];
                       data.forEach( domain => {
@@ -161,6 +204,8 @@ function App() {
                 </TableCell>
                 <TableCell verticalAlign="middle">
                   <Form.Dropdown
+                    selection
+                    fluid
                     options={[
                       { key: 'all', text: 'All', value: 'all' },
                       { key: 'tbr', text: 'To Be Released', value: 'To Be Released' },
@@ -173,11 +218,16 @@ function App() {
                 </TableCell>
                 <TableCell verticalAlign="middle">
                   <Form.Dropdown
+                    selection
+                    fluid
                     options={[
                       { key: 'any', text: 'Any Length', value: 'any' },
                       { key: '3', text: '3 Letters', value: '3' },
+                      { key: '3+', text: '3+ Letters', value: '3+' },
                       { key: '4', text: '4 Letters', value: '4' },
+                      { key: '4+', text: '4+ Letters', value: '4+' },
                       { key: '5', text: '5 Letters', value: '5' },
+                      { key: '5+', text: '5+ Letters', value: '5+' },
                       { key: '6+', text: 'Over 5 Letters', value: '6+' },
                     ]}
                     value={filterWordLength}
@@ -186,86 +236,127 @@ function App() {
                 </TableCell>
               </TableRow>
             {
-              data.filter( ( domain ) => {
+              ( () => {
+                const dataVisible = data.filter( ( domain ) => {
 
-                if (searchQuery && !domain.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-                  return false;
-                }
-                if (filterFlag !== false && domain.flag !== 1 ) {
-                  return false;
-                }
-                if (filterAdded !== 'all' && 0 !== domain.added.indexOf( filterAdded )) {
-                  return false;
-                }
-                if (filterSession !== 'all' && domain.tbr !== filterSession) {
-                  return false;
-                }
-                if (filterStatus !== 'all' && 0 !== domain.status.indexOf( filterStatus ) ) {
-                  return false;
-                }
-                if (filterWordLength !== 'any' ) {
+                  if ( searchQuery && 2 <= searchQuery.length && !domain.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    return false;
+                  }
+                  if ( filterNameLength !== 'any' ) {
+  
+                    const filterLength = parseInt(filterNameLength, 10) + 3;
+                    
+                    if (filterNameLength.includes('+')) {
+                      if (domain.name.length < filterLength) return false;
+                    } else if (domain.name.length !== filterLength) {
+                      return false;
+                    }
+                  }
+                  if (filterFlag !== false && domain.flag !== 1 ) {
+                    return false;
+                  }
+                  if (filterAdded !== 'all' && 0 !== domain.added.indexOf( filterAdded )) {
+                    return false;
+                  }
+                  if (filterSession !== 'all' && domain.tbr !== filterSession) {
+                    return false;
+                  }
+                  if (filterStatus !== 'all' && 0 !== domain.status.indexOf( filterStatus ) ) {
+                    return false;
+                  }
+                  if (filterWordLength !== 'any' ) {
+  
+                    if (!domain.words || domain.words.length === 0) return false;
 
-                  if ( !domain.words ) return false;
-                  
-                  if ( filterWordLength === '6+' && 6 > domain.words[0].length ) return false;
-                  if ( parseInt( filterWordLength ) !== domain.words[0].length ) return false;
-                }
+                    const firstWordLength = domain.words[0].length;
+                    const filterLength = parseInt(filterWordLength, 10);
+                    
+                    if (filterWordLength.includes('+')) {
+                      if (firstWordLength < filterLength) return false;
+                    } else if (firstWordLength !== filterLength) {
+                      return false;
+                    }
+                  }
+  
+                  return true;
+                } ).map( ( domain ) => {
+  
+                  let displayName = domain.name;
+                  if ( domain.words ) {
+                    displayName = [
+                      domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
+                      ( <strong>{ domain.words[ 0 ] }</strong>),
+                      domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
+                    ];
+                  }
 
-                return true;
-              } ).map( ( domain ) => {
+                  let rowProps = {};
+                  if ( domain.removed) {
 
-                let displayName = domain.name;
-                if ( domain.words ) {
-                  displayName = [
-                    domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
-                    ( <strong>{ domain.words[ 0 ] }</strong>),
-                    domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
-                  ];
-                }
+                    if ( domain.auctioned ) {
+                      rowProps.negative = true;
+                    } else {
+                      rowProps.warning = true;
+                    }
 
-                return (
-                  <TableRow key={ domain.id }>
-                    <TableCell textAlign="center" verticalAlign="middle">
-                      <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
+                  } else if ( domain.flag ) {
+                    rowProps.positive = true;
+                  }
+  
+                  return (
 
-                        const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
+                    <TableRow key={ domain.id } {...rowProps}>
+                      <TableCell>{ domain.id }</TableCell>
+                      <TableCell textAlign="center" verticalAlign="middle">
+                        <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
+  
+                          const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
+  
+                          fetch(`${domainsApi}/domains/${domain.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify( domainUpdated )
+                          } ).then(response => {
+                            if (response.ok) {
+  
+                                console.log("Domain flag updated");
+                                dispatch({ type: 'LOAD_DATA', data: data.map( d => 
+                                  d.id === domain.id ? domainUpdated : d
+                                ) } );
+                        
+                            } else {
+                              console.error("Failed to update domain flag:", response.status, response.statusText);
+                              props.checked = !props.checked; // Revert checkbox if update fails
+                            }
+                          } ).catch(error => {
+                            console.error("Error updating domain flag:", error);
+                            props.checked = !props.checked; // Revert checkbox on network error
+                          } );
+  
+                        } } />
+                      </TableCell>
+                      <TableCell>{ displayName }</TableCell>
+                      <TableCell>{ domain.added }</TableCell>
+                      <TableCell>{ domain.tbr }</TableCell>
+                      <TableCell>{ domain.status }</TableCell>
+                      <TableCell>{ domain.words && domain.words.join( ', ' ) }</TableCell>
+                    </TableRow>
+                  );
+                } );
 
-                        fetch(`${domainsApi}/domains/${domain.id}`, {
-                          method: 'PUT',
-                          headers: {
-                              'Content-Type': 'application/json'
-                          },
-                          body: JSON.stringify( domainUpdated )
-                        } ).then(response => {
-                          if (response.ok) {
+                domainsCount = dataVisible.length;
 
-                              console.log("Domain flag updated");
-                              dispatch({ type: 'LOAD_DATA', data: data.map( d => 
-                                d.id === domain.id ? domainUpdated : d
-                              ) } );
-                      
-                          } else {
-                            console.error("Failed to update domain flag:", response.status, response.statusText);
-                            props.checked = !props.checked; // Revert checkbox if update fails
-                          }
-                        } ).catch(error => {
-                          console.error("Error updating domain flag:", error);
-                          props.checked = !props.checked; // Revert checkbox on network error
-                        } );
-
-                      } } />
-                    </TableCell>
-                    <TableCell>{ domain.id }</TableCell>
-                    <TableCell>{ displayName }</TableCell>
-                    <TableCell>{ domain.added }</TableCell>
-                    <TableCell>{ domain.tbr }</TableCell>
-                    <TableCell>{ domain.status }</TableCell>
-                    <TableCell>{ domain.words && domain.words.join( ', ' ) }</TableCell>
-                  </TableRow>
-                );
-              } )
+                return dataVisible;
+              } )()
             }
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableHeaderCell colSpan="7" textAlign="right">{ `Domains: ${domainsCount}` }</TableHeaderCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         )
       }
