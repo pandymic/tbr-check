@@ -10,7 +10,11 @@ import {
   TableBody,
   Checkbox,
   Button,
-  Form
+  Form,
+  Pagination,
+  Grid,
+  GridRow,
+  GridColumn,
 } from 'semantic-ui-react';
 import _ from 'lodash';
 import 'semantic-ui-css/semantic.min.css'
@@ -70,6 +74,9 @@ const App = () => {
     data: null,
     direction: null,
   } );
+
+  const [ perPage, setPerPage ] = useState( 100 );
+  const [ page, setPage ] = useState( 1 );
 
   const [ filters, setFilters ] = useState( {
     domain: '',
@@ -259,6 +266,9 @@ const App = () => {
                 </TableRow>
               {
                 ( () => {
+
+                  domainsCount = 0;
+
                   const dataVisible = data.filter( ( domain ) => {
 
                     if ( filters.flag !== false && domain.flag !== 1 ) {
@@ -372,8 +382,9 @@ const App = () => {
                       if ( !hasMatch ) return false;
                     }
     
+                    domainsCount++;
                     return true;
-                  } ).map( ( domain ) => {
+                  } ).slice( ( page - 1 ) * perPage, page * perPage ).map( ( domain ) => {
     
                     let displayName = domain.name;
                     if ( domain.words ) {
@@ -440,7 +451,8 @@ const App = () => {
                     );
                   } );
 
-                  domainsCount = dataVisible.length;
+                  const totalPages = Math.ceil( domainsCount / perPage );
+                  if ( totalPages < page ) setPage( totalPages );
 
                   return dataVisible;
                 } )()
@@ -448,7 +460,19 @@ const App = () => {
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableHeaderCell colSpan="7" textAlign="right">{ `Domains: ${domainsCount}` }</TableHeaderCell>
+                  <TableHeaderCell colSpan="7">
+                    <Grid verticalAlign="middle" columns="equal">
+                      <GridColumn textAlign="left">{domainsCount} Domains</GridColumn>
+                      <GridColumn textAlign="center">
+                        <Pagination
+                          activePage={page}
+                          totalPages={Math.ceil( domainsCount / perPage )}
+                          onPageChange={ ( e, { activePage } ) => setPage( activePage ) }
+                        />
+                      </GridColumn>
+                      <GridColumn textAlign="right">Page {page} of {Math.ceil( domainsCount / perPage )}</GridColumn>
+                    </Grid>
+                  </TableHeaderCell>
                 </TableRow>
               </TableFooter>
             </Table>

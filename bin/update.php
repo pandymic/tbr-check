@@ -35,14 +35,17 @@ try {
     return (object)[ 'name' => $row->domain, 'date' => $row->date_tbr, 'id' => $row->id ];
   }, $results );
 
-  $url = $config->tbrUrl;
+  $tbrCmd = escapeshellcmd( $config->tbrCmd );
 
-  $tbr_response = `lynx -dump $url`;
+  $tbr_response = `$tbrCmd`;
   $tbr_domains = json_decode( $tbr_response );
 
   // Prepare insert statement
-  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, date_tbr, date_added) VALUES (:domain, :date_tbr, :now)');
+  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, domain_length, has_dashes, has_numbers, date_tbr, date_added) VALUES (:domain, :domain_length, :has_dashes, :has_numbers, :date_tbr, :now)');
   $insertStmt->bindParam(':domain', $domain);
+  $insertStmt->bindParam(':domain_length', $domain_length, PDO::PARAM_INT );
+  $insertStmt->bindParam(':has_dashes', $has_dashes, PDO::PARAM_INT );
+  $insertStmt->bindParam(':has_numbers', $has_numbers, PDO::PARAM_INT );
   $insertStmt->bindParam(':date_tbr', $date_tbr);
   $insertStmt->bindParam(':now', $config->now );
 
@@ -59,7 +62,10 @@ try {
       }
     }
     // This code will only be reached if no $upcoming_domains match was found for the current $tbr_domain
-    $domain = $tbr_domain->name;
+    $domain = strtolower( $tbr_domain->name );
+    $domain_length = strlen( $domain );
+    $has_dashes = false !== strpos( $domain, '-' ) ? 1 : 0;
+    $has_numbers = 1 === preg_match( '/[\d]/', $domain ) ? 1 : 0;
     $date_tbr = $tbr_domain->date;
     $insertStmt->execute();
     $log->added[] = 'Added ' . $domain . ' - ' . $date_tbr;
@@ -80,9 +86,9 @@ try {
     $log->removed[] = 'Removed ' . $upcoming_domain->name . ' - ' . $upcoming_domain->date;
   }
 
-  $url = $config->resultsUrl;
+  $resultsCmd = escapeshellcmd( $config->resultsCmd );
 
-  $results_response = `lynx -dump $url`;
+  $results_response = `$resultsCmd`;
   $results = json_decode( $results_response );
   if ( null !== $results && is_object( $results ) && isset( $results->releaseDate ) ) {
 

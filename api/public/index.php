@@ -31,7 +31,7 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
 
   $slim->get( '/domains', function( $request, $response, $args ) use ( $config ) {
 
-    $selectStmt = $config->db->prepare('SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.flag, r.date_released as auctioned FROM domains d LEFT JOIN results_to_domains r2d ON d.id = r2d.domains_id LEFT JOIN results r ON r2d.results_id = r.id WHERE d.domain NOT REGEXP "[0-9-]+" AND d.domain NOT REGEXP ".{13,}" ORDER BY d.date_removed ASC, d.date_added DESC, d.date_tbr ASC, d.domain ASC');
+    $selectStmt = $config->db->prepare('SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.flag, r.date_released as auctioned FROM domains d LEFT JOIN results_to_domains r2d ON d.id = r2d.domains_id LEFT JOIN results r ON r2d.results_id = r.id WHERE d.has_dashes = 0 AND d.has_numbers = 0 AND d.domain_length < 13 ORDER BY d.date_removed ASC, d.date_added DESC, d.date_tbr ASC, d.domain ASC');
     $selectStmt->execute();
     $domainList = $selectStmt->fetchAll(PDO::FETCH_OBJ);
 
@@ -122,8 +122,17 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
         $parsedBody = $request->getParsedBody();
 
         if ( !empty( $parsedBody['name'] ) && !empty( $parsedBody['tbr'] )  ) {
-          $updateStmt = $config->db->prepare('UPDATE domains SET domain = :domain, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed, flag = :flag WHERE id = :id');
-          $updateStmt->bindParam(':domain', $parsedBody['name']);
+
+          $domain = strtolower( $parsedBody['name'] );
+          $domain_length = strlen( $domain );
+          $has_dashes = false !== strpos( $domain, '-' ) ? 1 : 0;
+          $has_numbers = 1 === preg_match( '/[\d]/', $domain ) ? 1 : 0;
+
+          $updateStmt = $config->db->prepare('UPDATE domains SET domain = :domain, domain_length = :domain_length, has_dashes = :has_dashes, has_numbers = :has_numbers, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed, flag = :flag WHERE id = :id');
+          $updateStmt->bindParam(':domain', $domain);
+          $updateStmt->bindParam(':domain_length', $domain_length, PDO::PARAM_INT);
+          $updateStmt->bindParam(':has_dashes', $has_dashes, PDO::PARAM_INT);
+          $updateStmt->bindParam(':has_numbers', $has_numbers, PDO::PARAM_INT);
           $updateStmt->bindParam(':date_tbr', $parsedBody['tbr']);
           $updateStmt->bindParam(':date_added', $parsedBody['added']);
           $updateStmt->bindParam(':date_removed', $parsedBody['removed']);
