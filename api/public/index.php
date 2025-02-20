@@ -53,13 +53,13 @@ $slim->group( '/api/v1', function( $slim ) use ( $config ) {
           } );
         }
 
-        if ( empty( $domainList[ $i ]->removed ) ) {
-          $domainList[ $i ]->status = 'To Be Released';
+        if ( !empty( $domainList[ $i ]->auctioned ) ) {
+          $domainList[ $i ]->status = 'Auctioned ' . $domainList[ $i ]->auctioned;
         } else {
-          if ( !empty( $domainList[ $i ]->auctioned ) ) {
-            $domainList[ $i ]->status = 'Auctioned ' . $domainList[ $i ]->auctioned;
-          } else {
+          if ( !empty( $domainList[ $i ]->removed ) ) {
             $domainList[ $i ]->status = 'Released ' . $domainList[ $i ]->removed;
+          } else {
+            $domainList[ $i ]->status = 'To Be Released';
           }
         }
 

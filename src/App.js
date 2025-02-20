@@ -16,10 +16,9 @@ import _ from 'lodash';
 import 'semantic-ui-css/semantic.min.css'
 import './App.css';
 
-
 const domainsApi = process.env.REACT_APP_BACKEND_API ?? '';
 
-function TableReducer( state, action) {
+const TableReducer = ( state, action) => {
   switch ( action.type ) {
     case 'CHANGE_SORT':
 
@@ -46,7 +45,25 @@ function TableReducer( state, action) {
   }
 }
 
-function App() {
+const LengthOptions = ( min, max ) => {
+
+  min = parseInt( min, 10 ) || 2;
+  max = parseInt( max, 10 ) || 6;
+
+  if ( min > max ) {
+    [ min, max]  = [ max, min ];
+  }
+
+  let options = [];
+  for ( let i = min; i <= max; i++ ) {
+    options.push( { key: `${i}-`, text: `${i} Letters or less`, value: `${i}-` } );
+    options.push( { key: `${i}`, text: `${i} Letters`, value: `${i}` } );
+    options.push( { key: `${i}+`, text: `${i} Letters or more`, value: `${i}+` } );
+  }
+  return options;
+}
+
+const App = () => {
 
   const [ tableState, dispatch ] = useReducer( TableReducer, {
     column: null,
@@ -54,13 +71,15 @@ function App() {
     direction: null,
   } );
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterNameLength, setFilterNameLength] = useState( 'any' );
-  const [filterFlag, setFilterFlag] = useState( false );
-  const [filterAdded, setFilterAdded] = useState( 'all' );
-  const [filterSession, setFilterSession] = useState( 'all' );
-  const [filterStatus, setFilterStatus] = useState( 'all' );
-  const [filterWordLength, setFilterWordLength] = useState( 'any' );
+  const [ filters, setFilters ] = useState( {
+    domain: '',
+    flag: false,
+    domainLength: [],
+    added: [],
+    session: [],
+    status: [],
+    wordLength: [],
+  } );
 
   useEffect( () => {
 
@@ -82,282 +101,358 @@ function App() {
   let domainsCount = data?.length ?? 0;
 
   return (
-    <Container className="App">
+    <Container fluid className="App">
       {
         data && (
-          <Table sortable celled>
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'id' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'id' } ) }>ID</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  textAlign="center" 
-                  sorted={ column === 'flag' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'flag' } ) }>Flag</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'name' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'name' } ) }>Domain</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'added' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'added' } ) }>Added</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'tbr' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'tbr' } ) }>Session</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'status' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'status' } ) }>Status</TableHeaderCell>
-                <TableHeaderCell 
-                  verticalAlign="top"
-                  sorted={ column === 'words' ? direction : null } 
-                  onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'words' } ) }>Words</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form small filters">
-                <TableCell verticalAlign="middle">
-                  <Button basic content="Reset"
-                    size="small"
-                    onClick={ () => {
-                      setSearchQuery('');
-                      setFilterNameLength('any');
-                      setFilterFlag(false);
-                      setFilterAdded('all');
-                      setFilterSession('all');
-                      setFilterStatus('all');
-                      setFilterWordLength('any');
-                    } }
-                  />
-                </TableCell>
-                <TableCell textAlign="center" verticalAlign="middle">
-                  <Checkbox
-                    checked={filterFlag}
-                    onChange={(e, { checked }) => setFilterFlag( checked )}
-                  />
-                </TableCell>
-                <TableCell verticalAlign="middle">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '.78571429em' }}>
-                    <Form.Input
-                      size="small"
-                      icon="search"
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+          <>
+          <Container fluid textAlign="right">
+            <Form.Input
+              icon="search"
+              placeholder="Search..."
+              value={ filters.domain ?? '' }
+              onChange={ e => {
+                setFilters( { ...filters, domain: e.target.value ?? '' } );
+              } }
+            />
+          </Container>
+            <Table sortable celled>
+              <TableHeader>
+                <TableRow>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'id' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'id' } ) }>ID</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    textAlign="center" 
+                    sorted={ column === 'flag' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'flag' } ) }>Flag</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'name' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'name' } ) }>Domain</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'added' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'added' } ) }>Added</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'tbr' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'tbr' } ) }>Session</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'status' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'status' } ) }>Status</TableHeaderCell>
+                  <TableHeaderCell 
+                    verticalAlign="top"
+                    sorted={ column === 'words' ? direction : null } 
+                    onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'words' } ) }>Words</TableHeaderCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form filters">
+                  <TableCell verticalAlign="middle">
+                    <Button basic content="Reset"
+                      onClick={ () => {
+                        setFilters( {
+                          domain: '',
+                          flag: false,
+                          domainLength: [],
+                          added: [],
+                          session: [],
+                          status: [],
+                          wordLength: [],
+                        } );
+                      } }
                     />
+                  </TableCell>
+                  <TableCell textAlign="center" verticalAlign="middle">
+                    <Checkbox
+                      checked={ filters.flag }
+                      onChange={ ( e, { checked } ) => {
+                        setFilters( { ...filters, flag: checked } );
+                      } }
+                    />
+                  </TableCell>
+                  <TableCell verticalAlign="middle">
                     <Form.Dropdown
                       wrapSelection={false}
-                      selection
-                      compact
-                      options={[
-                        { key: 'any', text: 'Any Length', value: 'any' },
-                        { key: '3', text: '3 Letters', value: '3' },
-                        { key: '3+', text: '3+ Letters', value: '3+' },
-                        { key: '4', text: '4 Letters', value: '4' },
-                        { key: '4+', text: '4+ Letters', value: '4+' },
-                        { key: '5', text: '5 Letters', value: '5' },
-                        { key: '5+', text: '5+ Letters', value: '5+' },
-                        { key: '6+', text: 'Over 5 Letters', value: '6+' },
-                      ]}
-                      value={filterNameLength}
-                      onChange={(e, { value }) => setFilterNameLength(value)}
+                      selection multiple
+                      options={ LengthOptions() }
+                      value={ filters.domainLength }
+                      onChange={ ( e, { value } ) => {
+                        setFilters( { ...filters, domainLength: value } );
+                      } }
                     />
-                  </div>
-                </TableCell>
-                <TableCell verticalAlign="middle">
-                  <Form.Dropdown
-                    selection
-                    fluid
-                    options={( () => {
-                      const options = [ { key: 'all', text: 'All', value: 'all' } ];
-                      data.forEach( domain => {
-                        const value = domain.added.substring( 0, 10 );
-                        const option = { key: value, text: value, value: value };
-                        if ( !options.find( o => o.value === value ) ) options.push( option );
-                      } );
-                      return options;
-                    } )()}
-                    value={filterAdded}
-                    onChange={(e, { value }) => setFilterAdded(value)}
-                  />
-                </TableCell>
-                <TableCell verticalAlign="middle">
-                  <Form.Dropdown
-                    selection
-                    fluid
-                    options={( () => {
-                      const options = [ { key: 'all', text: 'All', value: 'all' } ];
-                      data.forEach( domain => {
-                        const option = { key: domain.tbr, text: domain.tbr, value: domain.tbr };
-                        if ( !options.find( o => o.value === domain.tbr ) ) options.push( option );
-                      } );
-                      return options;
-                    } )()}
-                    value={filterSession}
-                    onChange={(e, { value }) => setFilterSession(value)}
-                  />
-                </TableCell>
-                <TableCell verticalAlign="middle">
-                  <Form.Dropdown
-                    selection
-                    fluid
-                    options={[
-                      { key: 'all', text: 'All', value: 'all' },
-                      { key: 'tbr', text: 'To Be Released', value: 'To Be Released' },
-                      { key: 'released', text: 'Released', value: 'Released' },
-                      { key: 'auctioned', text: 'Auctioned', value: 'Auctioned' },
-                    ]}
-                    value={filterStatus}
-                    onChange={(e, { value }) => setFilterStatus(value)}
-                  />
-                </TableCell>
-                <TableCell verticalAlign="middle">
-                  <Form.Dropdown
-                    selection
-                    fluid
-                    options={[
-                      { key: 'any', text: 'Any Length', value: 'any' },
-                      { key: '3', text: '3 Letters', value: '3' },
-                      { key: '3+', text: '3+ Letters', value: '3+' },
-                      { key: '4', text: '4 Letters', value: '4' },
-                      { key: '4+', text: '4+ Letters', value: '4+' },
-                      { key: '5', text: '5 Letters', value: '5' },
-                      { key: '5+', text: '5+ Letters', value: '5+' },
-                      { key: '6+', text: 'Over 5 Letters', value: '6+' },
-                    ]}
-                    value={filterWordLength}
-                    onChange={(e, { value }) => setFilterWordLength(value)}
-                  />
-                </TableCell>
-              </TableRow>
-            {
-              ( () => {
-                const dataVisible = data.filter( ( domain ) => {
+                  </TableCell>
+                  <TableCell verticalAlign="middle">
+                    <Form.Dropdown
+                      selection multiple
+                      fluid
+                      options={( () => {
+                        const options = [];
+                        data.forEach( domain => {
+                          const value = domain.added;
+                          // if ( !options.find( o => o.value === value ) ) options.push( { key: value, text: value, value: value } );
+                          if ( !options.find( o => o.value === value.substring( 0, 10 ) ) ) options.push( { key: `${value.substring( 0, 10 )} 23:59:59`, text: value.substring( 0, 10 ), value: value.substring( 0, 10 ) } );
+                        } );
+                        options.sort( ( a, b ) => {
+                          const dateA = new Date( a.key ), dateB = new Date( b.key );
+                          return dateB - dateA;
+                        } );
+                        return options;
+                      } )()}
+                      value={ filters.added }
+                      onChange={ ( e, { value } ) => {
+                        setFilters( { ...filters, added: value } );
+                      } }
+                    />
+                  </TableCell>
+                  <TableCell verticalAlign="middle">
+                    <Form.Dropdown
+                      selection multiple
+                      fluid
+                      options={( () => {
+                        const options = [];
+                        data.forEach( domain => {
+                          const value = domain.tbr.substring( 0, 10 );
+                          if ( !options.find( o => o.key === value ) ) options.push( { key: value, text: value, value: value } );
+                        } );
+                        options.sort( ( a, b ) => {
+                          const dateA = new Date( a.key ), dateB = new Date( b.key );
+                          return dateB - dateA;
+                        } );
+                        return options;
+                      } )()}
+                      value={ filters.session }
+                      onChange={ ( e, { value } ) => {
+                        setFilters( { ...filters, session: value } );
+                      } }
+                    />
+                  </TableCell>
+                  <TableCell verticalAlign="middle">
+                    <Form.Dropdown
+                      selection multiple
+                      fluid
+                      options={[
+                        { key: 'tbr', text: 'To Be Released', value: 'To Be Released' },
+                        { key: 'released', text: 'Released', value: 'Released' },
+                        { key: 'auctioned', text: 'Auctioned', value: 'Auctioned' },
+                      ]}
+                      value={ filters.status }
+                      onChange={ ( e, { value } ) => {
+                        setFilters( { ...filters, status: value } );
+                      } }
+                    />
+                  </TableCell>
+                  <TableCell verticalAlign="middle">
+                    <Form.Dropdown
+                      selection multiple
+                      fluid
+                      options={ LengthOptions( 3, 8 ) }
+                      value={ filters.wordLength }
+                      onChange={ ( e, { value } ) => {
+                        setFilters( { ...filters, wordLength: value } );
+                      } }
+                    />
+                  </TableCell>
+                </TableRow>
+              {
+                ( () => {
+                  const dataVisible = data.filter( ( domain ) => {
 
-                  if ( searchQuery && 2 <= searchQuery.length && !domain.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-                    return false;
-                  }
-                  if ( filterNameLength !== 'any' ) {
-  
-                    const filterLength = parseInt(filterNameLength, 10) + 3;
-                    
-                    if (filterNameLength.includes('+')) {
-                      if (domain.name.length < filterLength) return false;
-                    } else if (domain.name.length !== filterLength) {
+                    if ( filters.flag !== false && domain.flag !== 1 ) {
                       return false;
                     }
-                  }
-                  if (filterFlag !== false && domain.flag !== 1 ) {
-                    return false;
-                  }
-                  if (filterAdded !== 'all' && 0 !== domain.added.indexOf( filterAdded )) {
-                    return false;
-                  }
-                  if (filterSession !== 'all' && domain.tbr !== filterSession) {
-                    return false;
-                  }
-                  if (filterStatus !== 'all' && 0 !== domain.status.indexOf( filterStatus ) ) {
-                    return false;
-                  }
-                  if (filterWordLength !== 'any' ) {
-  
-                    if (!domain.words || domain.words.length === 0) return false;
 
-                    const firstWordLength = domain.words[0].length;
-                    const filterLength = parseInt(filterWordLength, 10);
-                    
-                    if (filterWordLength.includes('+')) {
-                      if (firstWordLength < filterLength) return false;
-                    } else if (firstWordLength !== filterLength) {
+                    if ( filters.domain && 2 <= filters.domain.length && !domain.name.toLowerCase().includes( filters.domain.toLowerCase() ) ) {
                       return false;
                     }
-                  }
-  
-                  return true;
-                } ).map( ( domain ) => {
-  
-                  let displayName = domain.name;
-                  if ( domain.words ) {
-                    displayName = [
-                      domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
-                      ( <strong>{ domain.words[ 0 ] }</strong>),
-                      domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
-                    ];
-                  }
 
-                  let rowProps = {};
-                  if ( domain.removed) {
+                    if ( filters.domainLength?.length ) {
 
-                    if ( domain.auctioned ) {
-                      rowProps.negative = true;
-                    } else {
-                      rowProps.warning = true;
-                    }
+                      const domainLength = domain.name.length - 3;
+                      const filterSorted = filters.domainLength.sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) );
 
-                  } else if ( domain.flag ) {
-                    rowProps.positive = true;
-                  }
-  
-                  return (
+                      let hasMatch = false;
+                      for ( let i = 0; i < filterSorted.length; i++ ) {
+                        const filterLength = parseInt( filterSorted[i], 10 );
+                        if (
+                          ( filterSorted[i].includes('+') && domainLength >= filterLength ) 
+                          || ( filterSorted[i].includes('-') && domainLength <= filterLength ) 
+                          || domainLength === filterLength
+                        ) {
+                          hasMatch = true;
+                          break;
+                        }
+                      }
 
-                    <TableRow key={ domain.id } {...rowProps}>
-                      <TableCell>{ domain.id }</TableCell>
-                      <TableCell textAlign="center" verticalAlign="middle">
-                        <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
-  
-                          const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
-  
-                          fetch(`${domainsApi}/domains/${domain.id}`, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify( domainUpdated )
-                          } ).then(response => {
-                            if (response.ok) {
-  
-                                console.log("Domain flag updated");
-                                dispatch({ type: 'LOAD_DATA', data: data.map( d => 
-                                  d.id === domain.id ? domainUpdated : d
-                                ) } );
+                      if ( hasMatch ) {
+
+                        const filtersPlus = filterSorted.filter(f => f.includes('+')).map(f => parseInt(f, 10));
+                        const filtersMinus = filterSorted.filter(f => f.includes('-')).map(f => parseInt(f, 10));
+    
+                        if ( filtersPlus.length > 0 && filtersMinus.length > 0 ) {
+
+                          const min = filtersPlus[0];
+                          const max = filtersMinus[filtersMinus.length -1];
                         
-                            } else {
-                              console.error("Failed to update domain flag:", response.status, response.statusText);
-                              props.checked = !props.checked; // Revert checkbox if update fails
-                            }
-                          } ).catch(error => {
-                            console.error("Error updating domain flag:", error);
-                            props.checked = !props.checked; // Revert checkbox on network error
-                          } );
-  
-                        } } />
-                      </TableCell>
-                      <TableCell>{ displayName }</TableCell>
-                      <TableCell>{ domain.added }</TableCell>
-                      <TableCell>{ domain.tbr }</TableCell>
-                      <TableCell>{ domain.status }</TableCell>
-                      <TableCell>{ domain.words && domain.words.join( ', ' ) }</TableCell>
-                    </TableRow>
-                  );
-                } );
+                          if ( 
+                            ( min < max  )
+                            && ( domainLength < min || domainLength > max )
+                          ) {
+                            hasMatch = false;
+                          }
+                        }
+                      }
+                      
+                      if ( !hasMatch ) return false;
+                    }
 
-                domainsCount = dataVisible.length;
+                    if ( filters.added?.length ) {
+                      for ( let i = 0; i < filters.added.length; i++ ) {
+                        if ( 0 !== domain.added.indexOf( filters.added[i] ) ) return false;
+                      }
+                    }
 
-                return dataVisible;
-              } )()
-            }
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableHeaderCell colSpan="7" textAlign="right">{ `Domains: ${domainsCount}` }</TableHeaderCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
+                    if ( filters.session?.length ) {
+                      if ( !filters.session.includes( domain.tbr.substring( 0, 10 ) ) ) return false;
+                    }
+
+                    if ( filters.status?.length ) {
+                      let hasMatch = false;
+                      for ( let i = 0; i < filters.status.length; i++ ) {
+                        if ( 0 === domain.status.indexOf( filters.status[i] ) ) {
+                          hasMatch = true;
+                          break;
+                        }
+                      }
+                      if ( !hasMatch ) return false;
+                    }
+
+                    if ( filters.wordLength?.length ) {
+
+                      if ( !domain.words || 0 === domain.words.length ) return false;
+
+                      const wordLength = domain.words[0].length;
+                      const filterSorted = filters.wordLength.sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) );
+
+                      let hasMatch = false;
+                      for ( let i = 0; i < filterSorted.length; i++ ) {
+                        const filterLength = parseInt( filterSorted[i], 10 );
+                        if (
+                          ( filterSorted[i].includes('+') && wordLength >= filterLength ) 
+                          || ( filterSorted[i].includes('-') && wordLength <= filterLength ) 
+                          || wordLength === filterLength
+                        ) {
+                          hasMatch = true;
+                          break;
+                        }
+                      }
+
+                      if ( hasMatch ) {
+
+                        const filtersPlus = filterSorted.filter(f => f.includes('+')).map(f => parseInt(f, 10));
+                        const filtersMinus = filterSorted.filter(f => f.includes('-')).map(f => parseInt(f, 10));
+    
+                        if ( filtersPlus.length > 0 && filtersMinus.length > 0 ) {
+
+                          const min = filtersPlus[0];
+                          const max = filtersMinus[filtersMinus.length -1];
+                        
+                          if ( 
+                            ( min < max  )
+                            && ( wordLength < min || wordLength > max )
+                          ) {
+                            hasMatch = false;
+                          }
+                        }
+                      }
+                      
+                      if ( !hasMatch ) return false;
+                    }
+    
+                    return true;
+                  } ).map( ( domain ) => {
+    
+                    let displayName = domain.name;
+                    if ( domain.words ) {
+                      displayName = [
+                        domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
+                        ( <strong>{ domain.words[ 0 ] }</strong>),
+                        domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
+                      ];
+                    }
+
+                    let rowProps = {};
+                    if ( domain.removed) {
+
+                      if ( domain.auctioned ) {
+                        rowProps.negative = true;
+                      } else {
+                        rowProps.warning = true;
+                      }
+
+                    } else if ( domain.flag ) {
+                      rowProps.positive = true;
+                    }
+    
+                    return (
+
+                      <TableRow key={ domain.id } {...rowProps}>
+                        <TableCell>{ domain.id }</TableCell>
+                        <TableCell textAlign="center" verticalAlign="middle">
+                          <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
+    
+                            const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
+    
+                            fetch(`${domainsApi}/domains/${domain.id}`, {
+                              method: 'PUT',
+                              headers: {
+                                  'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify( domainUpdated )
+                            } ).then(response => {
+                              if (response.ok) {
+    
+                                  console.log( "Domain flag set." );
+                                  dispatch({ type: 'LOAD_DATA', data: data.map( d => 
+                                    d.id === domain.id ? domainUpdated : d
+                                  ) } );
+                          
+                              } else {
+                                console.error( "Failed to set domain flag:", response.status, response.statusText );
+                                props.checked = !props.checked;
+                              }
+                            } ).catch(error => {
+                              console.error( "Error setting domain flag:", error );
+                              props.checked = !props.checked;
+                            } );
+    
+                          } } />
+                        </TableCell>
+                        <TableCell>{ displayName }</TableCell>
+                        <TableCell>{ domain.added }</TableCell>
+                        <TableCell>{ domain.tbr }</TableCell>
+                        <TableCell>{ domain.status }</TableCell>
+                        <TableCell>{ domain.words && domain.words.join( ', ' ) }</TableCell>
+                      </TableRow>
+                    );
+                  } );
+
+                  domainsCount = dataVisible.length;
+
+                  return dataVisible;
+                } )()
+              }
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableHeaderCell colSpan="7" textAlign="right">{ `Domains: ${domainsCount}` }</TableHeaderCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </>
         )
       }
     </Container>
