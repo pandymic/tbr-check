@@ -112,16 +112,19 @@ const App = () => {
       {
         data && (
           <>
-          <Container fluid textAlign="right">
-            <Form.Input
-              icon="search"
-              placeholder="Search..."
-              value={ filters.domain ?? '' }
-              onChange={ e => {
-                setFilters( { ...filters, domain: e.target.value ?? '' } );
-              } }
-            />
-          </Container>
+            <Grid verticalAlign="middle" columns="equal">
+              <GridColumn textAlign="left"><b>TBR Check</b></GridColumn>
+              <GridColumn textAlign="right">
+                <Form.Input
+                  icon="search"
+                  placeholder="Search..."
+                  value={ filters.domain ?? '' }
+                  onChange={ e => {
+                    setFilters( { ...filters, domain: e.target.value ?? '' } );
+                  } }
+                />
+              </GridColumn>
+            </Grid>
             <Table sortable celled>
               <TableHeader>
                 <TableRow>
@@ -462,8 +465,7 @@ const App = () => {
                 <TableRow>
                   <TableHeaderCell colSpan="7">
                     <Grid verticalAlign="middle" columns="equal">
-                      <GridColumn textAlign="left">{domainsCount} Domains</GridColumn>
-                      <GridColumn textAlign="center">
+                      <GridColumn textAlign="left">
                         <Pagination
                           activePage={page}
                           totalPages={Math.ceil( domainsCount / perPage )}
@@ -476,6 +478,10 @@ const App = () => {
                 </TableRow>
               </TableFooter>
             </Table>
+            <Grid verticalAlign="middle" columns="equal">
+              <GridColumn textAlign="left">{domainsCount} Domains</GridColumn>
+              <GridColumn textAlign="right">Hello World!</GridColumn>
+            </Grid>
           </>
         )
       }
