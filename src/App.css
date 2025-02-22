@@ -2,10 +2,18 @@
   padding: 1rem; 
 }
 
+.ui.table {
+  margin: 1em 0 !important;
+}
+
 .ui.dropdown {
   display: inline-flex;
   align-items: center;
   gap: .78571429em;
+}
+
+.ui.dropdown.selection {
+  display: block;
 }
 
 .ui.dropdown > .text {
@@ -57,7 +65,7 @@
     text-align: center;
   }
 
-  .App > .ui.grid > div:last-child {
+  .App > .ui.grid > div:last-child:not(:only-child) {
     padding-top: 0 !important;
   }
 
@@ -73,7 +81,7 @@
   .ui.table:not(.unstackable) thead tr:before {
     display: flex;
     justify-content: flex-start;
-    align-items: center;
+    align-items: flex-start;
     content: "Sort";
     padding: .25em .75em!important;
     width: 90px;
@@ -143,6 +151,15 @@
     display: none !important;
   }
 
+  .ui.table:not(.unstackable) tr > td[data-label="Filters"],
+  .ui.table:not(.unstackable) tr > td[data-label="Filters"] ~ td:before {
+    align-items: center;
+  }
+
+  .ui.table:not(.unstackable) tr > td[data-label="Filters"] ~ td:before {
+    font-weight: 400 !important;
+  }
+
   .ui.table:not(.unstackable) tr > td[data-label="Filters"] .ui.checkbox:after {
     content: 'Has Flag';
     display: inline-block;
@@ -152,7 +169,7 @@
   .ui.table:not(.unstackable) tr > td:before {
     display: flex;
     justify-content: flex-start;
-    align-items: center;
+    align-items: flex-start;
     content: attr(data-label);
     padding: .25em .75em!important;
     width: 90px;
@@ -177,8 +194,8 @@
     text-align: center;
   }
 
-  .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div:last-child {
-    padding-top: 0 !important;
+  .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div:first-child:not(:only-child) {
+    padding-bottom: 0 !important;
   }
   
 }
