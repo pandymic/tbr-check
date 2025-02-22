@@ -454,7 +454,7 @@ const App = () => {
                     );
                   } );
 
-                  const totalPages = Math.ceil( domainsCount / perPage );
+                  const totalPages = Math.ceil( Math.max( 1, domainsCount / ( perPage || 1 ) ) );
                   if ( totalPages < page ) setPage( totalPages );
 
                   return dataVisible;
@@ -472,7 +472,7 @@ const App = () => {
                           onPageChange={ ( e, { activePage } ) => setPage( activePage ) }
                         />
                       </GridColumn>
-                      <GridColumn textAlign="right">Page {page} of {Math.ceil( domainsCount / perPage )}</GridColumn>
+                      <GridColumn textAlign="right">Page {page} of {Math.ceil( Math.max( 1, domainsCount / ( perPage || 1 ) ) )}</GridColumn>
                     </Grid>
                   </TableHeaderCell>
                 </TableRow>
