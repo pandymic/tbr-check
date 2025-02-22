@@ -19,3 +19,109 @@
 .ui.form.filters .field {
   margin: 0;
 }
+
+@media (max-width: 767px) {
+
+  .ui.table:not(.unstackable) thead tr {
+    display: flex !important;
+    align-items: space-between;
+    gap: 5px;
+    flex-wrap: wrap;
+    position: relative;
+    padding-left: 100px;
+  }
+
+  .ui.table:not(.unstackable) thead tr:before {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    content: "Sort";
+    padding: .25em .75em!important;
+    width: 90px;
+    background-color: #f9fafb !important;
+    font-weight: 700;
+    border-right: 1px solid rgba(34,36,38,.1);
+    border-bottom: 1px solid rgba(34,36,38,.1);
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+
+  .ui.table:not(.unstackable) thead tr th {
+    text-align: left !important;
+    border-radius: 4px;
+    font-weight: 400 !important;
+  }
+
+  .ui.table:not(.unstackable) thead tr th:first-child {
+    display: none !important;
+  }
+
+  .ui.table:not(.unstackable) tr.filters { 
+    display: flex !important;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+
+  .ui.table:not(.unstackable) tr.filters > td.reset { 
+    order: 1;
+    padding-bottom: 1em !important;
+  }
+
+  .ui.table:not(.unstackable) tr > td {
+    position: relative;
+    padding-left: 100px !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+  }
+  
+  .ui.table:not(.unstackable) tbody tr {
+    padding-top: 0 !important;
+    padding-bottom: 1px !important;
+  }
+  
+  .ui.table:not(.unstackable) tbody tr td:nth-child(2) {
+    padding-top: 1em !important;
+  }
+  
+  .ui.table:not(.unstackable) tbody tr td:nth-child(2):before {
+    padding-top: 1em !important;
+  }
+  
+  .ui.table:not(.unstackable) tbody tr td:last-child {
+    padding-bottom: 1em !important;
+  }
+  
+  .ui.table:not(.unstackable) tbody tr td:last-child:before {
+    padding-bottom: 1em !important;
+  }
+
+  .ui.table:not(.unstackable) tr > td[data-label="ID"] {
+    display: none !important;
+  }
+
+  .ui.table:not(.unstackable) tr > td[data-label="Filters"] .ui.checkbox:after {
+    content: 'Has Flag';
+    display: inline-block;
+    margin-left: 25px;
+  }
+
+  .ui.table:not(.unstackable) tr > td:before {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    content: attr(data-label);
+    padding: .25em .75em!important;
+    width: 90px;
+    background-color: #f9fafb !important;
+    font-weight: 700;
+    border-right: 1px solid rgba(34,36,38,.1);
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+  
+}

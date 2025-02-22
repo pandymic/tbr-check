@@ -161,7 +161,7 @@ const App = () => {
               </TableHeader>
               <TableBody>
                 <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form filters">
-                  <TableCell verticalAlign="middle">
+                  <TableCell className="reset" verticalAlign="middle">
                     <Button basic content="Reset"
                       onClick={ () => {
                         setFilters( {
@@ -176,8 +176,8 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell textAlign="center" verticalAlign="middle">
-                    <Checkbox
+                  <TableCell data-label="Filters" textAlign="center" verticalAlign="middle">
+                    <Checkbox 
                       checked={ filters.flag }
                       onChange={ ( e, { checked } ) => {
                         setFilters( { ...filters, flag: checked } );
@@ -414,8 +414,8 @@ const App = () => {
                     return (
 
                       <TableRow key={ domain.id } {...rowProps}>
-                        <TableCell>{ domain.id }</TableCell>
-                        <TableCell textAlign="center" verticalAlign="middle">
+                        <TableCell data-label="ID">{ domain.id }</TableCell>
+                        <TableCell data-label="Flag" textAlign="center" verticalAlign="middle">
                           <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
     
                             const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
@@ -445,11 +445,11 @@ const App = () => {
     
                           } } />
                         </TableCell>
-                        <TableCell>{ displayName }</TableCell>
-                        <TableCell>{ domain.added }</TableCell>
-                        <TableCell>{ domain.tbr }</TableCell>
-                        <TableCell>{ domain.status }</TableCell>
-                        <TableCell>{ domain.words && domain.words.join( ', ' ) }</TableCell>
+                        <TableCell data-label="Domain">{ displayName }</TableCell>
+                        <TableCell data-label="Added">{ domain.added }</TableCell>
+                        <TableCell data-label="Session">{ domain.tbr }</TableCell>
+                        <TableCell data-label="Status">{ domain.status }</TableCell>
+                        <TableCell data-label="Words">{ domain.words && domain.words.join( ', ' ) }</TableCell>
                       </TableRow>
                     );
                   } );
