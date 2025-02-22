@@ -20,7 +20,46 @@
   margin: 0;
 }
 
+.ui.table tfoot th {
+  font-size: .92857143rem !important;
+  font-weight: 400 !important;
+}
+
+.ui.menu.pagination {
+  gap: 5px;
+}
+
+.ui.menu.pagination .item {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+
+  margin: 0 !important;
+  padding: 0 !important;
+  aspect-ratio: 1;
+}
+
 @media (max-width: 767px) {
+
+  .App {
+    padding: 1rem 0; 
+  }
+
+  .App > .ui.grid {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .App > .ui.grid > div {
+    width: auto !important;
+    text-align: center;
+  }
+
+  .App > .ui.grid > div:last-child {
+    padding-top: 0 !important;
+  }
 
   .ui.table:not(.unstackable) thead tr {
     display: flex !important;
@@ -48,13 +87,13 @@
     left: 0;
   }
 
-  .ui.table:not(.unstackable) thead tr th {
+  .ui.table:not(.unstackable) thead tr > th {
     text-align: left !important;
     border-radius: 4px;
     font-weight: 400 !important;
   }
 
-  .ui.table:not(.unstackable) thead tr th:first-child {
+  .ui.table:not(.unstackable) thead tr > th:first-child {
     display: none !important;
   }
 
@@ -75,6 +114,7 @@
     padding-left: 100px !important;
     text-align: left !important;
     box-sizing: border-box !important;
+    min-height: 27px;
   }
   
   .ui.table:not(.unstackable) tbody tr {
@@ -82,19 +122,20 @@
     padding-bottom: 1px !important;
   }
   
-  .ui.table:not(.unstackable) tbody tr td:nth-child(2) {
+  .ui.table:not(.unstackable) tbody tr > td:nth-child(2) {
     padding-top: 1em !important;
   }
   
-  .ui.table:not(.unstackable) tbody tr td:nth-child(2):before {
+  .ui.table:not(.unstackable) tbody tr > td:nth-child(2):before {
     padding-top: 1em !important;
   }
   
-  .ui.table:not(.unstackable) tbody tr td:last-child {
+  .ui.table:not(.unstackable) tbody tr > td:last-child {
     padding-bottom: 1em !important;
+    min-height: 37.5px;
   }
   
-  .ui.table:not(.unstackable) tbody tr td:last-child:before {
+  .ui.table:not(.unstackable) tbody tr > td:last-child:before {
     padding-bottom: 1em !important;
   }
 
@@ -122,6 +163,22 @@
     top: 0;
     bottom: 0;
     left: 0;
+  }
+
+  .ui.table:not(.unstackable) tfoot tr > th .ui.grid {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div {
+    width: auto !important;
+    text-align: center;
+  }
+
+  .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div:last-child {
+    padding-top: 0 !important;
   }
   
 }

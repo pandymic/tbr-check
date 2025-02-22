@@ -13,7 +13,6 @@ import {
   Form,
   Pagination,
   Grid,
-  GridRow,
   GridColumn,
 } from 'semantic-ui-react';
 import _ from 'lodash';
@@ -75,7 +74,7 @@ const App = () => {
     direction: null,
   } );
 
-  const [ perPage, setPerPage ] = useState( 100 );
+  const perPage = 100;
   const [ page, setPage ] = useState( 1 );
 
   const [ filters, setFilters ] = useState( {
@@ -161,7 +160,7 @@ const App = () => {
               </TableHeader>
               <TableBody>
                 <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form filters">
-                  <TableCell className="reset" verticalAlign="middle">
+                  <TableCell data-label="" className="reset" verticalAlign="middle">
                     <Button basic content="Reset"
                       onClick={ () => {
                         setFilters( {
@@ -184,7 +183,7 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell verticalAlign="middle">
+                  <TableCell data-label="" verticalAlign="middle">
                     <Form.Dropdown
                       wrapSelection={false}
                       selection multiple
@@ -195,7 +194,7 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell verticalAlign="middle">
+                  <TableCell data-label="" verticalAlign="middle">
                     <Form.Dropdown
                       selection multiple
                       fluid
@@ -218,7 +217,7 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell verticalAlign="middle">
+                  <TableCell data-label="" verticalAlign="middle">
                     <Form.Dropdown
                       selection multiple
                       fluid
@@ -240,7 +239,7 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell verticalAlign="middle">
+                  <TableCell data-label="" verticalAlign="middle">
                     <Form.Dropdown
                       selection multiple
                       fluid
@@ -255,7 +254,7 @@ const App = () => {
                       } }
                     />
                   </TableCell>
-                  <TableCell verticalAlign="middle">
+                  <TableCell data-label="" verticalAlign="middle">
                     <Form.Dropdown
                       selection multiple
                       fluid
@@ -470,6 +469,14 @@ const App = () => {
                           activePage={page}
                           totalPages={Math.ceil( domainsCount / perPage )}
                           onPageChange={ ( e, { activePage } ) => setPage( activePage ) }
+                          secondary
+                          ellipsisItem={null}
+                          firstItem={null}
+                          lastItem={null}
+                          prevItem="«"
+                          nextItem="»"
+                          siblingRange={1}
+                          size="small"
                         />
                       </GridColumn>
                       <GridColumn textAlign="right">Page {page} of {Math.ceil( Math.max( 1, domainsCount / ( perPage || 1 ) ) )}</GridColumn>
