@@ -47,6 +47,22 @@
   aspect-ratio: 1;
 }
 
+.ui.table:not(.unstackable) tfoot tr > th .ui.grid > div.pager-count {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ui.table:not(.unstackable) tfoot tr > th .ui.grid > div.pager-count div.pager-perpage {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+}
+
 @media (max-width: 767px) {
 
   .App {
@@ -83,7 +99,7 @@
     justify-content: flex-start;
     align-items: flex-start;
     content: "Sort";
-    padding: .25em .75em!important;
+    padding: 1.25em .75em .25em .75em !important;
     width: 90px;
     background-color: #f9fafb !important;
     font-weight: 700;
@@ -196,6 +212,11 @@
 
   .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div:first-child:not(:only-child) {
     padding-bottom: 0 !important;
+  }
+
+  .ui.table:not(.unstackable) tfoot tr > th .ui.grid > div.pager-count {
+    flex-direction: column;
+    justify-content: flex-start;
   }
   
 }

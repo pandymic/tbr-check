@@ -76,7 +76,7 @@ const App = () => {
     direction: 'descending',
   } );
 
-  const perPage = 100;
+  const [ perPage, setPerPage ] = useState( 100 );
   const [ page, setPage ] = useState( 1 );
   const [ status, setStatus ] = useState( 'Initializing' );
 
@@ -399,7 +399,7 @@ const App = () => {
 
                 domainsCount++;
                 return true;
-              } ).slice( ( page - 1 ) * perPage, page * perPage ).map( ( domain ) => {
+              } ).slice( ( page - 1 ) * ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ), page * ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) ).map( ( domain ) => {
 
                 let displayName = domain.name;
                 if ( domain.words ) {
@@ -465,7 +465,7 @@ const App = () => {
                 );
               } );
 
-              const totalPages = Math.ceil( Math.max( 1, domainsCount / ( perPage || 1 ) ) );
+              const totalPages = Math.ceil( Math.max( 1, domainsCount / ( ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) || 1 ) ) );
               if ( totalPages < page ) setPage( totalPages );
 
               return dataVisible;
@@ -476,10 +476,10 @@ const App = () => {
             <TableRow>
               <TableHeaderCell colSpan="7">
                 <Grid verticalAlign="middle" columns="equal">
-                  <GridColumn textAlign="left">
+                  <GridColumn className="pager-nav" textAlign="left">
                     <Pagination
                       activePage={page}
-                      totalPages={Math.ceil( domainsCount / perPage )}
+                      totalPages={Math.ceil( domainsCount / ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) )}
                       onPageChange={ ( e, { activePage } ) => setPage( activePage ) }
                       secondary
                       ellipsisItem={null}
@@ -491,7 +491,27 @@ const App = () => {
                       size="small"
                     />
                   </GridColumn>
-                  <GridColumn textAlign="right">Page {page} of {Math.ceil( Math.max( 1, domainsCount / ( perPage || 1 ) ) )}</GridColumn>
+                  <GridColumn className="pager-count" textAlign="right">
+                    <div className="pager-perpage">
+                      <Form.Dropdown
+                        wrapSelection={false}
+                        inline 
+                        compact 
+                        options={[
+                          { key: '50', text: '50 per page', value: 50 },
+                          { key: '100', text: '100 per page', value: 100 },
+                          { key: '250', text: '250 per page', value: 250 },
+                          { key: '500', text: '500 per page', value: 500 },
+                          { key: '1000', text: '1000 per page', value: 1000 },
+                          { key: 'all', text: 'View All', value: 'all' },
+                        ]}
+                        value={ "number" === typeof perPage ? ( perPage || 100 ) : 'all' }
+                        onChange={ ( e, { value } ) => {
+                          setPerPage( 'number' === typeof value ? ( value || 100 ) : 'all' );
+                        } }
+                      /></div>
+                      <div>Page {page} of {Math.ceil( Math.max( 1, domainsCount / ( ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) || 1 ) ) )}</div>
+                  </GridColumn>
                 </Grid>
               </TableHeaderCell>
             </TableRow>
