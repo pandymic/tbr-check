@@ -240,7 +240,7 @@ To run the client against a different API, set `REACT_APP_BACKEND_API`, e.g. `RE
 - **Watchlist.** A checkbox watches a domain; the note icon adds a note and a max bid.
 - **Export.** *CSV* downloads the current view.
 - **WHOIS.** Hover a domain for a WHOIS link.
-- **Chunked loading.** Rows load 100 at a time. With the *Auto-load* toggle in the table footer on (the default), the next chunk is prefetched 800px before the end. With it off, a *Load 100 more* button does it instead. The choice is remembered per browser. A progress bar shows how much of the list is loaded.
+- **Chunked loading.** Rows load 100 at a time. With the *Auto-load on scroll* toggle on (the default), the next chunk is prefetched 800px before the end. With it off, a *Load 100 more* button at the end of the list does it instead. The toggle sits at the top right, above the table, where loading can't push it out of reach. The choice is remembered per browser, and a progress bar in the table footer shows how much of the list is loaded.
 - **Request hygiene.** Search is debounced, stale requests are cancelled, and flag changes are optimistic.
 - **Footer.** Shows when the data was last updated, the next TBR session and the last auction (from `/domains/facets`), the app version, and data credits.
 - **Layout.**

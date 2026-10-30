@@ -38,8 +38,8 @@ const columns = [
 
 const canObserve = 'undefined' !== typeof window && 'IntersectionObserver' in window;
 
-// Table footer: progress, the next chunk (button or automatic), and the auto-load preference.
-const Pager = ( { shown, total, hasMore, loadingMore, loadMore, autoLoad, setAutoLoad, sentinel } ) => {
+// Table footer: progress and the next chunk (button or automatic).
+const Pager = ( { shown, total, hasMore, loadingMore, loadMore, autoLoad, sentinel } ) => {
   const remaining = Math.max( 0, ( total ?? 0 ) - shown );
   const percent = total ? Math.min( 100, Math.round( shown / total * 100 ) ) : 100;
   const manual = !autoLoad || !canObserve;
@@ -57,22 +57,27 @@ const Pager = ( { shown, total, hasMore, loadingMore, loadMore, autoLoad, setAut
         { !loadingMore && hasMore && !manual && <span className="hint">Loading more as you scroll</span> }
         { !hasMore && shown > 0 && <span className="hint">End of list</span> }
       </div>
-      <Checkbox toggle className="pager-mode" label="Auto-load" checked={ autoLoad } onChange={ ( e, { checked } ) => setAutoLoad( checked ) } title="Load the next rows automatically as you scroll" />
     </div>
   );
 };
 
 const fromLocation = () => parseQuery( window.location.search.slice( 1 ) || DEFAULT_QUERY );
 
-const StatsBar = ( { stats } ) => {
-  if ( !stats ) return <div className="stats">&nbsp;</div>;
-  const past = stats.released + stats.auctioned;
+// Counts for the current filters, plus list display options. Lives above the table so the
+// controls stay put while rows load below (in the footer, auto-load kept pushing them away).
+const StatsBar = ( { stats, autoLoad, setAutoLoad } ) => {
+  const past = stats ? stats.released + stats.auctioned : 0;
   return (
-    <div className="stats">
-      <span><b>{ stats.upcoming.toLocaleString() }</b> upcoming</span>
-      <span><b>{ stats.released.toLocaleString() }</b> released</span>
-      <span><b>{ stats.auctioned.toLocaleString() }</b> auctioned</span>
-      { past > 0 && <span title="Share of released domains matching these filters that sold at auction"><b>{ ( stats.auctionRate * 100 ).toFixed( 1 ) }%</b> auction rate</span> }
+    <div className="stats-bar">
+      <div className="stats">
+        { stats && <>
+          <span><b>{ stats.upcoming.toLocaleString() }</b> upcoming</span>
+          <span><b>{ stats.released.toLocaleString() }</b> released</span>
+          <span><b>{ stats.auctioned.toLocaleString() }</b> auctioned</span>
+          { past > 0 && <span title="Share of released domains matching these filters that sold at auction"><b>{ ( stats.auctionRate * 100 ).toFixed( 1 ) }%</b> auction rate</span> }
+        </> }
+      </div>
+      <Checkbox toggle className="load-mode" label="Auto-load on scroll" checked={ autoLoad } onChange={ ( e, { checked } ) => setAutoLoad( checked ) } title="Off: load more with a button at the end of the list" />
     </div>
   );
 };
@@ -165,7 +170,7 @@ const App = () => {
           />
         </div>
       </header>
-      <StatsBar stats={ stats } />
+      <StatsBar stats={ stats } autoLoad={ autoLoad } setAutoLoad={ setAutoLoad } />
       {
         ready ?
         (
@@ -203,7 +208,6 @@ const App = () => {
                     loadingMore={ loadingMore }
                     loadMore={ loadMore }
                     autoLoad={ autoLoad }
-                    setAutoLoad={ setAutoLoad }
                     sentinel={ sentinel }
                   />
                 </TableHeaderCell>

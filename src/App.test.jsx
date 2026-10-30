@@ -95,7 +95,7 @@ test( 'remembers the auto-load preference', async () => {
   render( <App /> );
   await screen.findByText( showing( 'Showing 100 of 150' ) );
 
-  userEvent.click( screen.getByText( 'Auto-load' ) );
+  userEvent.click( screen.getByText( 'Auto-load on scroll' ) );
   expect( localStorage.getItem( 'tbr-auto-load' ) ).toBe( 'false' );
   expect( screen.getByText( 'Load 50 more' ) ).toBeInTheDocument();
 } );
