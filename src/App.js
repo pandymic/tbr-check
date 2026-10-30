@@ -1,5 +1,5 @@
-import React, { useEffect, useReducer, useState } from 'react';
-import { 
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
   Container,
   Table,
   TableRow,
@@ -11,44 +11,44 @@ import {
   Checkbox,
   Button,
   Form,
-  Pagination,
   Grid,
   GridColumn,
   Loader,
   Dimmer
 } from 'semantic-ui-react';
-import _ from 'lodash';
-import 'semantic-ui-css/semantic.min.css'
+import './semantic.js';
 import './App.css';
 
 const domainsApi = process.env.REACT_APP_BACKEND_API ?? '';
 
-const TableReducer = ( state, action) => {
-  switch ( action.type ) {
-    case 'CHANGE_SORT':
+const CHUNK_SIZE = 100;
+const SEARCH_DELAY = 300;
 
-      if ( state.column === action.column ) {
-        return {
-          ...state,
-          data: state.data.slice().reverse(),
-          direction: state.direction === 'ascending' ? 'descending' : 'ascending',
-        }
-      }
+const emptyFilters = {
+  domain: '',
+  flag: false,
+  domainLength: [],
+  added: [],
+  session: [],
+  status: [],
+  wordLength: [],
+};
 
-      return {
-        column: action.column,
-        data: _.sortBy( state.data, [ action.column ] ),
-        direction: 'ascending',
-      }
-    case 'LOAD_DATA':
-      return {
-        ...state,
-        data: action.data
-      }
-    default:
-      throw new Error();
-  }
-}
+const columns = [
+  { key: 'id', label: 'ID' },
+  { key: 'flag', label: 'Flag', textAlign: 'center' },
+  { key: 'name', label: 'Domain' },
+  { key: 'added', label: 'Added' },
+  { key: 'tbr', label: 'Session' },
+  { key: 'status', label: 'Status' },
+  { key: 'words', label: 'Words' },
+];
+
+const statusOptions = [
+  { key: 'tbr', text: 'To Be Released', value: 'tbr' },
+  { key: 'released', text: 'Released', value: 'released' },
+  { key: 'auctioned', text: 'Auctioned', value: 'auctioned' },
+];
 
 const LengthOptions = ( min, max ) => {
 
@@ -68,493 +68,325 @@ const LengthOptions = ( min, max ) => {
   return options;
 }
 
+const domainLengthOptions = LengthOptions();
+const wordLengthOptions = LengthOptions( 3, 8 );
+const dateOptions = dates => dates.map( date => ( { key: date, text: date, value: date } ) );
+
+const useDebouncedValue = ( value, delay ) => {
+  const [ debounced, setDebounced ] = useState( value );
+  useEffect( () => {
+    const timer = setTimeout( () => setDebounced( value ), delay );
+    return () => clearTimeout( timer );
+  }, [ value, delay ] );
+  return debounced;
+}
+
+// Filter + sort state as API query parameters. Offset/limit/count are added per request.
+const buildQuery = ( filters, search, sort ) => {
+  const params = new URLSearchParams();
+  if ( 2 <= search.length ) params.set( 'q', search );
+  if ( filters.flag ) params.set( 'flag', '1' );
+  if ( filters.domainLength.length ) params.set( 'length', filters.domainLength.join( ',' ) );
+  if ( filters.wordLength.length ) params.set( 'wordLength', filters.wordLength.join( ',' ) );
+  if ( filters.added.length ) params.set( 'added', filters.added.join( ',' ) );
+  if ( filters.session.length ) params.set( 'session', filters.session.join( ',' ) );
+  if ( filters.status.length ) params.set( 'status', filters.status.join( ',' ) );
+  if ( sort.column ) {
+    params.set( 'sort', sort.column );
+    params.set( 'dir', 'descending' === sort.direction ? 'desc' : 'asc' );
+  }
+  return params.toString();
+}
+
+const fetchJson = ( url, signal ) => fetch( url, { signal } ).then( response => {
+  if ( !response.ok ) throw new Error( `${response.status} ${response.statusText}` );
+  return response.json();
+} );
+
+const DomainName = ( { domain } ) => {
+  if ( !domain.words ) return domain.name;
+  const word = domain.words[ 0 ];
+  const at = domain.name.indexOf( word );
+  return <>{ domain.name.substring( 0, at ) }<strong>{ word }</strong>{ domain.name.substring( at + word.length ) }</>;
+}
+
+const DomainRow = React.memo( ( { domain, onFlag } ) => {
+
+  let rowProps = {};
+  if ( domain.removed ) {
+
+    if ( domain.auctioned ) {
+      rowProps.negative = true;
+    } else {
+      rowProps.warning = true;
+    }
+
+  } else if ( domain.flag ) {
+    rowProps.positive = true;
+  }
+
+  return (
+  <TableRow {...rowProps}>
+    <TableCell data-label="ID">{ domain.id }</TableCell>
+    <TableCell data-label="Flag" textAlign="center" verticalAlign="middle">
+      <Checkbox checked={ !!domain.flag } onChange={ ( e, { checked } ) => onFlag( domain, checked ) } />
+    </TableCell>
+    <TableCell data-label="Domain"><DomainName domain={ domain } /></TableCell>
+    <TableCell data-label="Added">{ domain.added }</TableCell>
+    <TableCell data-label="Session">{ domain.tbr }</TableCell>
+    <TableCell data-label="Status">{ domain.status }</TableCell>
+    <TableCell data-label="Words">{ domain.words && domain.words.join( ', ' ) }</TableCell>
+  </TableRow>
+  );
+} );
+
 const App = () => {
 
-  const [ tableState, dispatch ] = useReducer( TableReducer, {
-    column: 'added',
-    data: null,
-    direction: 'descending',
-  } );
+  const [ sort, setSort ] = useState( { column: null, direction: null } ); // null = server default order
+  const [ filters, setFilters ] = useState( emptyFilters );
+  const [ facets, setFacets ] = useState( { added: [], session: [] } );
 
-  const [ perPage, setPerPage ] = useState( 100 );
-  const [ page, setPage ] = useState( 1 );
+  const [ items, setItems ] = useState( [] );
+  const [ total, setTotal ] = useState( null );
   const [ status, setStatus ] = useState( 'Initializing' );
+  const [ loadingMore, setLoadingMore ] = useState( false );
 
-  const [ filters, setFilters ] = useState( {
-    domain: '',
-    flag: false,
-    domainLength: [],
-    added: [],
-    session: [],
-    status: [],
-    wordLength: [],
-  } );
+  const search = useDebouncedValue( filters.domain.trim(), SEARCH_DELAY );
+  const query = useMemo( () => buildQuery( filters, search, sort ), [ filters, search, sort ] );
 
+  const controller = useRef( null );
+  const sentinel = useRef( null );
+
+  const hasMore = null !== total && items.length < total;
+
+  // Dropdown options; cached server-side and only needed once.
+  useEffect( () => {
+    const abort = new AbortController();
+    fetchJson( `${domainsApi}/domains/facets`, abort.signal ).then( setFacets ).catch( error => {
+      if ( 'AbortError' !== error.name ) console.error( error );
+    } );
+    return () => abort.abort();
+  }, [] );
+
+  // First chunk (with total) whenever filters or sort change. Supersedes anything in flight.
   useEffect( () => {
 
-    setStatus( 'Loading' );
+    controller.current?.abort();
+    const abort = controller.current = new AbortController();
 
-    fetch( `${domainsApi}/domains` ).then( ( response ) => {
-      return response.json();
-    } ).then( ( data ) => {
-      if ( data ) {
-        console.log( `Loaded from \`${domainsApi}/domains\`...` );
-        setStatus( 'Done' );
-        dispatch({ type: 'LOAD_DATA', data: data.map( domain => { return { ...domain, key: crypto.randomUUID() } }) });
-      } else {
-        setStatus( 'Error' );
-      }
-    } ).catch( ( error ) => {
+    setStatus( status => 'Initializing' === status ? status : 'Loading' );
+    setLoadingMore( false );
+
+    fetchJson( `${domainsApi}/domains?${query && `${query}&`}offset=0&limit=${CHUNK_SIZE}`, abort.signal ).then( data => {
+      setItems( data.items );
+      setTotal( data.total );
+      setStatus( 'Done' );
+    } ).catch( error => {
+      if ( 'AbortError' === error.name ) return;
       console.error( error );
       setStatus( 'Error' );
     } );
 
-  }, [] ); // eslint-disable-line
+    return () => abort.abort();
+  }, [ query ] );
 
-  const { column, data, direction } = tableState;
-  
-  let domainsCount = data?.length ?? 0;
+  // Next chunk, appended. Skips the count query since the total is already known.
+  const loadMore = useCallback( () => {
+
+    if ( loadingMore || 'Done' !== status || !hasMore ) return;
+
+    const abort = controller.current;
+    setLoadingMore( true );
+
+    fetchJson( `${domainsApi}/domains?${query && `${query}&`}offset=${items.length}&limit=${CHUNK_SIZE}&count=0`, abort.signal ).then( data => {
+      setItems( items => items.concat( data.items ) );
+      setLoadingMore( false );
+    } ).catch( error => {
+      if ( 'AbortError' === error.name ) return;
+      console.error( error );
+      setLoadingMore( false );
+    } );
+  }, [ loadingMore, status, hasMore, query, items.length ] );
+
+  // Start loading before the end of the list is actually on screen.
+  useEffect( () => {
+    const node = sentinel.current;
+    if ( !node || !hasMore || !( 'IntersectionObserver' in window ) ) return;
+    const observer = new IntersectionObserver( entries => {
+      if ( entries[ 0 ].isIntersecting ) loadMore();
+    }, { rootMargin: '800px 0px' } );
+    observer.observe( node );
+    return () => observer.disconnect();
+  }, [ hasMore, loadMore ] );
+
+  const changeSort = column => setSort( sort => ( {
+    column,
+    direction: sort.column === column && 'ascending' === sort.direction ? 'descending' : 'ascending',
+  } ) );
+
+  const setFilter = ( key, value ) => setFilters( filters => ( { ...filters, [ key ]: value } ) );
+
+  // Optimistic; reverts if the request fails.
+  const onFlag = useCallback( ( domain, checked ) => {
+
+    const setFlag = flag => setItems( items => items.map( d => d.id === domain.id ? { ...d, flag } : d ) );
+    setFlag( checked ? 1 : 0 );
+
+    fetch( `${domainsApi}/domains/${domain.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify( { flag: checked ? 1 : 0 } )
+    } ).then( response => {
+      if ( !response.ok ) throw new Error( `${response.status} ${response.statusText}` );
+    } ).catch( error => {
+      console.error( 'Failed to set domain flag:', error );
+      setFlag( domain.flag );
+    } );
+  }, [] );
+
+  const ready = 'Initializing' !== status && 'Error' !== status;
 
   return (
     <Container fluid className="App">
       <Grid verticalAlign="middle" columns="equal">
         <GridColumn textAlign="left"><b>TBR Check</b></GridColumn>
         {
-          data && 'Done' === status && (
+          ready && (
           <GridColumn textAlign="right">
             <Form.Input
               icon="search"
+              loading={ filters.domain.trim() !== search }
               placeholder="Search..."
-              value={ filters.domain ?? '' }
-              onChange={ e => {
-                setFilters( { ...filters, domain: e.target.value ?? '' } );
-              } }
+              value={ filters.domain }
+              onChange={ e => setFilter( 'domain', e.target.value ?? '' ) }
             />
           </GridColumn>
           )
         }
       </Grid>
       {
-        data && 'Done' === status ?
+        ready ?
         (
-        <Table sortable celled>
-          <TableHeader>
-            <TableRow>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'id' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'id' } ) }>ID</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                textAlign="center" 
-                sorted={ column === 'flag' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'flag' } ) }>Flag</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'name' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'name' } ) }>Domain</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'added' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'added' } ) }>Added</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'tbr' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'tbr' } ) }>Session</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'status' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'status' } ) }>Status</TableHeaderCell>
-              <TableHeaderCell 
-                verticalAlign="top"
-                sorted={ column === 'words' ? direction : null } 
-                onClick={ () => dispatch( { type: 'CHANGE_SORT', column: 'words' } ) }>Words</TableHeaderCell>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form filters">
-              <TableCell data-label="" className="reset" verticalAlign="middle">
-                <Button basic content="Reset"
-                  onClick={ () => {
-                    setFilters( {
-                      domain: '',
-                      flag: false,
-                      domainLength: [],
-                      added: [],
-                      session: [],
-                      status: [],
-                      wordLength: [],
-                    } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Filters" textAlign="center" verticalAlign="middle">
-                <Checkbox 
-                  checked={ filters.flag }
-                  onChange={ ( e, { checked } ) => {
-                    setFilters( { ...filters, flag: checked } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Domain" verticalAlign="middle">
-                <Form.Dropdown
-                  wrapSelection={false}
-                  selection multiple
-                  options={ LengthOptions() }
-                  value={ filters.domainLength }
-                  onChange={ ( e, { value } ) => {
-                    setFilters( { ...filters, domainLength: value } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Added" verticalAlign="middle">
-                <Form.Dropdown
-                  selection multiple
-                  fluid
-                  options={( () => {
-                    const options = [];
-                    data.forEach( domain => {
-                      const value = domain.added;
-                      // if ( !options.find( o => o.value === value ) ) options.push( { key: value, text: value, value: value } );
-                      if ( !options.find( o => o.value === value.substring( 0, 10 ) ) ) options.push( { key: `${value.substring( 0, 10 )} 23:59:59`, text: value.substring( 0, 10 ), value: value.substring( 0, 10 ) } );
-                    } );
-                    options.sort( ( a, b ) => {
-                      const dateA = new Date( a.key ), dateB = new Date( b.key );
-                      return dateB - dateA;
-                    } );
-                    return options;
-                  } )()}
-                  value={ filters.added }
-                  onChange={ ( e, { value } ) => {
-                    setFilters( { ...filters, added: value } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Session" verticalAlign="middle">
-                <Form.Dropdown
-                  selection multiple
-                  fluid
-                  options={( () => {
-                    const options = [];
-                    data.forEach( domain => {
-                      const value = domain.tbr.substring( 0, 10 );
-                      if ( !options.find( o => o.key === value ) ) options.push( { key: value, text: value, value: value } );
-                    } );
-                    options.sort( ( a, b ) => {
-                      const dateA = new Date( a.key ), dateB = new Date( b.key );
-                      return dateB - dateA;
-                    } );
-                    return options;
-                  } )()}
-                  value={ filters.session }
-                  onChange={ ( e, { value } ) => {
-                    setFilters( { ...filters, session: value } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Status" verticalAlign="middle">
-                <Form.Dropdown
-                  selection multiple
-                  fluid
-                  options={[
-                    { key: 'tbr', text: 'To Be Released', value: 'To Be Released' },
-                    { key: 'released', text: 'Released', value: 'Released' },
-                    { key: 'auctioned', text: 'Auctioned', value: 'Auctioned' },
-                  ]}
-                  value={ filters.status }
-                  onChange={ ( e, { value } ) => {
-                    setFilters( { ...filters, status: value } );
-                  } }
-                />
-              </TableCell>
-              <TableCell data-label="Words" verticalAlign="middle">
-                <Form.Dropdown
-                  selection multiple
-                  fluid
-                  options={ LengthOptions( 3, 8 ) }
-                  value={ filters.wordLength }
-                  onChange={ ( e, { value } ) => {
-                    setFilters( { ...filters, wordLength: value } );
-                  } }
-                />
-              </TableCell>
-            </TableRow>
-          {
-            ( () => {
-
-              domainsCount = 0;
-
-              const dataVisible = data.filter( ( domain ) => {
-
-                if ( filters.flag !== false && domain.flag !== 1 ) {
-                  return false;
-                }
-
-                if ( filters.domain && 2 <= filters.domain.length && !domain.name.toLowerCase().includes( filters.domain.toLowerCase() ) ) {
-                  return false;
-                }
-
-                if ( filters.domainLength?.length ) {
-
-                  const domainLength = domain.name.length - 3;
-                  const filterSorted = filters.domainLength.sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) );
-
-                  let hasMatch = false;
-                  for ( let i = 0; i < filterSorted.length; i++ ) {
-                    const filterLength = parseInt( filterSorted[i], 10 );
-                    if (
-                      ( filterSorted[i].includes('+') && domainLength >= filterLength ) 
-                      || ( filterSorted[i].includes('-') && domainLength <= filterLength ) 
-                      || domainLength === filterLength
-                    ) {
-                      hasMatch = true;
-                      break;
-                    }
-                  }
-
-                  if ( hasMatch ) {
-
-                    const filtersPlus = filterSorted.filter(f => f.includes('+')).map(f => parseInt(f, 10));
-                    const filtersMinus = filterSorted.filter(f => f.includes('-')).map(f => parseInt(f, 10));
-
-                    if ( filtersPlus.length > 0 && filtersMinus.length > 0 ) {
-
-                      const min = filtersPlus[0];
-                      const max = filtersMinus[filtersMinus.length -1];
-                    
-                      if ( 
-                        ( min < max  )
-                        && ( domainLength < min || domainLength > max )
-                      ) {
-                        hasMatch = false;
-                      }
-                    }
-                  }
-                  
-                  if ( !hasMatch ) return false;
-                }
-
-                if ( filters.added?.length ) {
-                  for ( let i = 0; i < filters.added.length; i++ ) {
-                    if ( 0 !== domain.added.indexOf( filters.added[i] ) ) return false;
-                  }
-                }
-
-                if ( filters.session?.length ) {
-                  if ( !filters.session.includes( domain.tbr.substring( 0, 10 ) ) ) return false;
-                }
-
-                if ( filters.status?.length ) {
-                  let hasMatch = false;
-                  for ( let i = 0; i < filters.status.length; i++ ) {
-                    if ( 0 === domain.status.indexOf( filters.status[i] ) ) {
-                      hasMatch = true;
-                      break;
-                    }
-                  }
-                  if ( !hasMatch ) return false;
-                }
-
-                if ( filters.wordLength?.length ) {
-
-                  if ( !domain.words || 0 === domain.words.length ) return false;
-
-                  const wordLength = domain.words[0].length;
-                  const filterSorted = filters.wordLength.sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) );
-
-                  let hasMatch = false;
-                  for ( let i = 0; i < filterSorted.length; i++ ) {
-                    const filterLength = parseInt( filterSorted[i], 10 );
-                    if (
-                      ( filterSorted[i].includes('+') && wordLength >= filterLength ) 
-                      || ( filterSorted[i].includes('-') && wordLength <= filterLength ) 
-                      || wordLength === filterLength
-                    ) {
-                      hasMatch = true;
-                      break;
-                    }
-                  }
-
-                  if ( hasMatch ) {
-
-                    const filtersPlus = filterSorted.filter(f => f.includes('+')).map(f => parseInt(f, 10));
-                    const filtersMinus = filterSorted.filter(f => f.includes('-')).map(f => parseInt(f, 10));
-
-                    if ( filtersPlus.length > 0 && filtersMinus.length > 0 ) {
-
-                      const min = filtersPlus[0];
-                      const max = filtersMinus[filtersMinus.length -1];
-                    
-                      if ( 
-                        ( min < max  )
-                        && ( wordLength < min || wordLength > max )
-                      ) {
-                        hasMatch = false;
-                      }
-                    }
-                  }
-                  
-                  if ( !hasMatch ) return false;
-                }
-
-                domainsCount++;
-                return true;
-              } ).slice( ( page - 1 ) * ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ), page * ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) ).map( ( domain ) => {
-
-                let displayName = domain.name;
-                if ( domain.words ) {
-                  displayName = [
-                    domain.name.substring( 0, domain.name.indexOf( domain.words[ 0 ] ) ),
-                    ( <strong>{ domain.words[ 0 ] }</strong>),
-                    domain.name.substring( domain.name.indexOf( domain.words[ 0 ] ) + domain.words[ 0 ].length )
-                  ];
-                }
-
-                let rowProps = {};
-                if ( domain.removed) {
-
-                  if ( domain.auctioned ) {
-                    rowProps.negative = true;
-                  } else {
-                    rowProps.warning = true;
-                  }
-
-                } else if ( domain.flag ) {
-                  rowProps.positive = true;
-                }
-
-                return (
-                <TableRow key={domain.id} {...rowProps}>
-                  <TableCell data-label="ID">{ domain.id }</TableCell>
-                  <TableCell data-label="Flag" textAlign="center" verticalAlign="middle">
-                    <Checkbox checked={ domain.flag ? true : false } onChange={ ( event, props ) =>  {
-
-                      const domainUpdated = { ...domain, flag: props.checked ? 1 : 0 };
-
-                      fetch(`${domainsApi}/domains/${domain.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify( domainUpdated )
-                      } ).then(response => {
-                        if (response.ok) {
-
-                            console.log( "Domain flag set." );
-                            dispatch({ type: 'LOAD_DATA', data: data.map( d => 
-                              d.id === domain.id ? domainUpdated : d
-                            ) } );
-                    
-                        } else {
-                          console.error( "Failed to set domain flag:", response.status, response.statusText );
-                          props.checked = !props.checked;
-                        }
-                      } ).catch(error => {
-                        console.error( "Error setting domain flag:", error );
-                        props.checked = !props.checked;
-                      } );
-
-                    } } />
-                  </TableCell>
-                  <TableCell data-label="Domain">{ displayName }</TableCell>
-                  <TableCell data-label="Added">{ domain.added }</TableCell>
-                  <TableCell data-label="Session">{ domain.tbr }</TableCell>
-                  <TableCell data-label="Status">{ domain.status }</TableCell>
-                  <TableCell data-label="Words">{ domain.words && domain.words.join( ', ' ) }</TableCell>
-                </TableRow>
-                );
-              } );
-
-              const totalPages = Math.ceil( Math.max( 1, domainsCount / ( ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) || 1 ) ) );
-              if ( totalPages < page ) setPage( totalPages );
-
-              return dataVisible;
-            } )()
-          }
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableHeaderCell colSpan="7">
-                <Grid verticalAlign="middle" columns="equal">
-                  <GridColumn className="pager-nav" textAlign="left">
-                    <Pagination
-                      activePage={page}
-                      totalPages={Math.ceil( domainsCount / ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) )}
-                      onPageChange={ ( e, { activePage } ) => setPage( activePage ) }
-                      secondary
-                      ellipsisItem={null}
-                      firstItem={null}
-                      lastItem={null}
-                      prevItem="«"
-                      nextItem="»"
-                      siblingRange={1}
-                      size="small"
-                    />
-                  </GridColumn>
-                  <GridColumn className="pager-count" textAlign="right">
-                    <div className="pager-perpage">
-                      <Form.Dropdown
-                        wrapSelection={false}
-                        inline 
-                        compact 
-                        options={[
-                          { key: '50', text: '50 per page', value: 50 },
-                          { key: '100', text: '100 per page', value: 100 },
-                          { key: '250', text: '250 per page', value: 250 },
-                          { key: '500', text: '500 per page', value: 500 },
-                          { key: '1000', text: '1000 per page', value: 1000 },
-                          { key: 'all', text: 'View All', value: 'all' },
-                        ]}
-                        value={ "number" === typeof perPage ? ( perPage || 100 ) : 'all' }
-                        onChange={ ( e, { value } ) => {
-                          setPerPage( 'number' === typeof value ? ( value || 100 ) : 'all' );
-                        } }
-                      /></div>
-                      <div>Page {page} of {Math.ceil( Math.max( 1, domainsCount / ( ( "number" === typeof perPage ? ( perPage || 100 ) : domainsCount ) || 1 ) ) )}</div>
-                  </GridColumn>
-                </Grid>
-              </TableHeaderCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
+        <Dimmer.Dimmable dimmed={ 'Loading' === status }>
+          <Dimmer active={ 'Loading' === status } inverted verticalAlign="top">
+            <Loader active inline="centered" content="Loading…" />
+          </Dimmer>
+          <Table sortable celled>
+            <TableHeader>
+              <TableRow>
+                { columns.map( ( { key, label, textAlign } ) => (
+                <TableHeaderCell
+                  key={ key }
+                  verticalAlign="top"
+                  textAlign={ textAlign }
+                  sorted={ sort.column === key ? sort.direction : null }
+                  onClick={ () => changeSort( key ) }>{ label }</TableHeaderCell>
+                ) ) }
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow style={{ backgroundColor: 'rgba( 249, 250, 251, 0.5 )' }} className="ui form filters">
+                <TableCell data-label="" className="reset" verticalAlign="middle">
+                  <Button basic content="Reset" onClick={ () => setFilters( emptyFilters ) } />
+                </TableCell>
+                <TableCell data-label="Filters" textAlign="center" verticalAlign="middle">
+                  <Checkbox
+                    checked={ filters.flag }
+                    onChange={ ( e, { checked } ) => setFilter( 'flag', checked ) }
+                  />
+                </TableCell>
+                <TableCell data-label="Domain" verticalAlign="middle">
+                  <Form.Dropdown
+                    wrapSelection={false}
+                    selection multiple
+                    options={ domainLengthOptions }
+                    value={ filters.domainLength }
+                    onChange={ ( e, { value } ) => setFilter( 'domainLength', value ) }
+                  />
+                </TableCell>
+                <TableCell data-label="Added" verticalAlign="middle">
+                  <Form.Dropdown
+                    selection multiple search
+                    fluid
+                    options={ dateOptions( facets.added ) }
+                    value={ filters.added }
+                    onChange={ ( e, { value } ) => setFilter( 'added', value ) }
+                  />
+                </TableCell>
+                <TableCell data-label="Session" verticalAlign="middle">
+                  <Form.Dropdown
+                    selection multiple search
+                    fluid
+                    options={ dateOptions( facets.session ) }
+                    value={ filters.session }
+                    onChange={ ( e, { value } ) => setFilter( 'session', value ) }
+                  />
+                </TableCell>
+                <TableCell data-label="Status" verticalAlign="middle">
+                  <Form.Dropdown
+                    selection multiple
+                    fluid
+                    options={ statusOptions }
+                    value={ filters.status }
+                    onChange={ ( e, { value } ) => setFilter( 'status', value ) }
+                  />
+                </TableCell>
+                <TableCell data-label="Words" verticalAlign="middle">
+                  <Form.Dropdown
+                    selection multiple
+                    fluid
+                    options={ wordLengthOptions }
+                    value={ filters.wordLength }
+                    onChange={ ( e, { value } ) => setFilter( 'wordLength', value ) }
+                  />
+                </TableCell>
+              </TableRow>
+              { items.map( domain => <DomainRow key={ domain.id } domain={ domain } onFlag={ onFlag } /> ) }
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableHeaderCell colSpan="7">
+                  <Grid verticalAlign="middle" columns="equal">
+                    <GridColumn className="pager-nav" textAlign="left">
+                      <div ref={ sentinel }>
+                        { loadingMore && <Loader active inline size="small" /> }
+                        { !loadingMore && hasMore && <Button basic size="small" content="Load more" onClick={ loadMore } /> }
+                      </div>
+                    </GridColumn>
+                    <GridColumn className="pager-count" textAlign="right">
+                      <div>Showing { items.length.toLocaleString() } of { ( total ?? 0 ).toLocaleString() }</div>
+                    </GridColumn>
+                  </Grid>
+                </TableHeaderCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </Dimmer.Dimmable>
         )
         :
         (
         <div style={{ position: 'relative' }}>
           <Dimmer active inverted>
-            <Loader indeterminate={ 'Initializing' === status ? true : false } content={`${status}…`}/>
+            {
+              'Error' === status ?
+              <Button basic icon="refresh" content="Couldn't load domains. Retry" onClick={ () => window.location.reload() } /> :
+              <Loader indeterminate content="Initializing…"/>
+            }
           </Dimmer>
           <Table celled sortable style={{ filter: 'blur(3px)' }}>
             <TableHeader>
               <TableRow>
-                <TableHeaderCell verticalAlign="top">ID</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Flag</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Domain</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Added</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Session</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Status</TableHeaderCell>
-                <TableHeaderCell verticalAlign="top">Words</TableHeaderCell>
+                { columns.map( ( { key, label } ) => <TableHeaderCell key={ key } verticalAlign="top">{ label }</TableHeaderCell> ) }
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
+              { [ 0, 1 ].map( row => (
+              <TableRow key={ row }>
+                { columns.map( ( { key } ) => <TableCell key={ key }><br/>&nbsp;<br/></TableCell> ) }
               </TableRow>
-              <TableRow>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-                <TableCell><br/>&nbsp;<br/></TableCell>
-              </TableRow>
+              ) ) }
             </TableBody>
             <TableFooter>
               <TableRow>
@@ -567,8 +399,8 @@ const App = () => {
       }
       <Grid verticalAlign="middle" columns="equal">
         {
-          data && 'Done' === status && (
-          <GridColumn textAlign="left">{domainsCount} Domains</GridColumn>
+          ready && null !== total && (
+          <GridColumn textAlign="left">{ total.toLocaleString() } Domains</GridColumn>
           )
         }
         <GridColumn textAlign="right"><a href="https://pandymic.com">pandymic.com</a></GridColumn>
