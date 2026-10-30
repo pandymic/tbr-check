@@ -1,4 +1,4 @@
-#!/opt/remi/php82/root/bin/php
+#!/usr/bin/env php
 <?php
 
 $waitIncrement = 10;
@@ -10,6 +10,8 @@ do {
   sleep( $wait < $waitIncrement ? $wait : $waitIncrement );
 } while( $wait > $waitIncrement );
 print "\n\n";
+
+require __DIR__ . '/../lib/domains.php';
 
 $config = include __DIR__ . '/../etc/config.php';
 $config->now = date( 'Y-m-d H:i:s', $config->time );
@@ -41,11 +43,14 @@ try {
   $tbr_domains = json_decode( $tbr_response );
 
   // Prepare insert statement
-  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, domain_length, has_dashes, has_numbers, date_tbr, date_added) VALUES (:domain, :domain_length, :has_dashes, :has_numbers, :date_tbr, :now)');
+  $wordIndex = tbr_load_words( $config->words );
+  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, domain_length, has_dashes, has_numbers, words, word_length, date_tbr, date_added) VALUES (:domain, :domain_length, :has_dashes, :has_numbers, :words, :word_length, :date_tbr, :now)');
   $insertStmt->bindParam(':domain', $domain);
   $insertStmt->bindParam(':domain_length', $domain_length, PDO::PARAM_INT );
   $insertStmt->bindParam(':has_dashes', $has_dashes, PDO::PARAM_INT );
   $insertStmt->bindParam(':has_numbers', $has_numbers, PDO::PARAM_INT );
+  $insertStmt->bindParam(':words', $words );
+  $insertStmt->bindParam(':word_length', $word_length, PDO::PARAM_INT );
   $insertStmt->bindParam(':date_tbr', $date_tbr);
   $insertStmt->bindParam(':now', $config->now );
 
@@ -62,10 +67,13 @@ try {
       }
     }
     // This code will only be reached if no $upcoming_domains match was found for the current $tbr_domain
-    $domain = strtolower( $tbr_domain->name );
-    $domain_length = strlen( $domain );
-    $has_dashes = false !== strpos( $domain, '-' ) ? 1 : 0;
-    $has_numbers = 1 === preg_match( '/[\d]/', $domain ) ? 1 : 0;
+    $fields = tbr_domain_fields( $tbr_domain->name, $wordIndex );
+    $domain = $fields->domain;
+    $domain_length = $fields->domain_length;
+    $has_dashes = $fields->has_dashes;
+    $has_numbers = $fields->has_numbers;
+    $words = $fields->words;
+    $word_length = $fields->word_length;
     $date_tbr = $tbr_domain->date;
     $insertStmt->execute();
     $log->added[] = 'Added ' . $domain . ' - ' . $date_tbr;
@@ -133,6 +141,9 @@ try {
                     $linkInsertStmt->bindParam(':results_id', $insertId, PDO::PARAM_INT);
                     $linkInsertStmt->bindParam(':domains_id', $domainId, PDO::PARAM_INT);
                     $linkInsertStmt->execute();
+
+                    $auctionedStmt = $db->prepare('UPDATE domains SET date_auctioned = GREATEST(COALESCE(date_auctioned, :date_released), :date_released_max) WHERE id = :id');
+                    $auctionedStmt->execute([':date_released' => $releaseDate, ':date_released_max' => $releaseDate, ':id' => $domainId]);
                 }
 
             } catch (PDOException $e) {
@@ -152,6 +163,5 @@ try {
   print 'Error: ' . $e->getMessage();
 }
 
-print_r( $domainList );
 print_r( $log );
  
