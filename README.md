@@ -56,9 +56,11 @@ return (object)[
 
 The app's database user only needs `SELECT, INSERT, UPDATE, DELETE`. Migrations need `ALTER` and `CREATE`.
 
-### `.env.local` (not tracked)
+### `.env` (tracked) and `.env.local` (not tracked)
 
-Build-time settings for the client. Vite inlines these into the public bundle, so never put secrets here. The Create React App names are still accepted.
+`.env` holds public defaults; `.env.local` overrides them per machine. `REACT_APP_SITE_URL` is the app's absolute URL, and `index.html` uses it for the canonical link, Open Graph tags and schema.org data.
+
+These are build-time settings. Vite inlines them into the public bundle and `index.html`, so never put secrets here. The Create React App variable names still work.
 
 ```
 PUBLIC_URL=/tbr
@@ -203,7 +205,7 @@ Each item looks like this:
 { "id": 3275023, "name": "appshop.ca", "tbr": "2026-11-04", "added": "2026-10-30 00:57:23",
   "removed": null, "auctioned": null, "status": "To Be Released",
   "flag": 0, "note": null, "maxBid": null,
-  "score": 42, "segmented": true, "segments": "app|shop",
+  "score": 31, "segmented": true, "segments": "app|shop",
   "words": [ { "word": "shop", "kind": "common" }, { "word": "app", "kind": "tech" } ] }
 ```
 
@@ -249,3 +251,9 @@ Apache serves the production site from `/var/www/internal/html/tbr`. That direct
 
 - `api.php` → `api/public/index.php`. API changes go live as soon as they're saved. The Apache rewrite rule sends `/tbr/api*` to `api.php`; Slim takes its base path from the script's directory.
 - `index.html`, `static/`, `manifest.json` and the icons → `build/`. Run `npm run build` to deploy the client. (`asset-manifest.json` was a Create React App file and can be removed.)
+
+Only those files are linked, so new public files must go in `public/static/`, which is served through the `static/` link (the SVG favicon, touch icon and Open Graph image live there). Linking the whole `build/` directory instead would remove this restriction.
+
+### Branding
+
+The logo mark is `public/static/favicon.svg`; `src/components/Logo.jsx` inlines the same artwork for the header. `favicon.ico` (16–48 px) uses a simplified check-only mark at 16 and 24 px, where the ring doesn't read. `public/static/og-image.png` is the 1200×630 link-preview image. `index.html` also carries schema.org JSON-LD describing the site, the app and its author.

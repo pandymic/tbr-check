@@ -44,7 +44,7 @@ const Views = ( { query, onApply } ) => {
 
   return (
     <>
-      <Dropdown button basic className="icon views" labeled icon="bookmark outline" text={ current ? ( current.text ?? current.name ) : 'Views' } scrolling>
+      <Dropdown button basic className="icon views inverted" labeled icon="bookmark outline" text={ current ? ( current.text ?? current.name ) : 'Views' } scrolling>
         <Dropdown.Menu>
           <Dropdown.Header content="Presets" />
           { PRESETS.map( preset => <Dropdown.Item key={ preset.key } text={ preset.text } active={ preset.query === query } onClick={ () => onApply( preset.query ) } /> ) }

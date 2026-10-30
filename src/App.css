@@ -2,19 +2,50 @@
   padding: 1rem;
 }
 
-/* Toolbar */
+/* Header */
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: .75rem;
+  gap: .75rem 1.5rem;
+  margin: -1rem -1rem 0;
+  padding: .75rem 1rem;
+  background: #1b1c1d;
+  border-bottom: 3px solid #D52B1E;
+  color: #fff;
 }
 
-.toolbar h1 {
-  margin: 0;
-  font-size: 1.15rem;
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.logo:hover {
+  color: #fff;
+}
+
+.logo .logo-mark {
+  flex: none;
+  display: block;
+}
+
+.logo .wordmark {
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: -.01em;
+}
+
+.logo .tagline {
+  margin-left: .35rem;
+  padding-left: .9rem;
+  border-left: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.55);
+  font-size: .95rem;
 }
 
 .toolbar .actions {
@@ -27,6 +58,44 @@
 .toolbar .actions > .ui.button,
 .toolbar .actions > .ui.dropdown.button {
   margin: 0;
+}
+
+.toolbar .ui.basic.inverted.button,
+.toolbar .ui.basic.inverted.buttons .button {
+  box-shadow: 0 0 0 1px rgba(255,255,255,.25) inset !important;
+}
+
+.toolbar .ui.basic.inverted.button:hover,
+.toolbar .ui.basic.inverted.button:focus,
+.toolbar .ui.basic.inverted.button.active {
+  background: rgba(255,255,255,.08) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.5) inset !important;
+  color: #fff !important;
+}
+
+.toolbar .ui.labeled.icon.dropdown.button.inverted > .icon {
+  background: rgba(255,255,255,.08);
+}
+
+.toolbar .ui.transparent.inverted.input.search {
+  min-width: 15rem;
+  padding: .55em .9em;
+  border-radius: .28571429rem;
+  background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.2) inset;
+}
+
+.toolbar .ui.transparent.inverted.input.search:focus-within {
+  background: rgba(255,255,255,.12);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.5) inset;
+}
+
+.toolbar .ui.transparent.inverted.input.search > i.icon {
+  right: .4em;
+}
+
+.toolbar .ui.transparent.inverted.input.search > input::placeholder {
+  color: rgba(255,255,255,.5);
 }
 
 .toolbar .ui.button.alerts {
@@ -196,10 +265,22 @@ tr:hover a.whois {
 
 /* Small screens: each row becomes a labelled card. */
 
+/* The tagline only fits beside the actions on wide screens. */
+@media (max-width: 1199px) {
+  .logo .tagline {
+    display: none;
+  }
+}
+
 @media (max-width: 767px) {
 
   .App {
     padding: 1rem .5rem;
+  }
+
+  .toolbar {
+    margin: -1rem -.5rem 0;
+    padding: .75rem;
   }
 
   .mobile-only {

@@ -1,14 +1,71 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-CA">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TBR Check — upcoming .ca domain releases</title>
+    <meta name="description" content="Score and watch the .ca domains CIRA is about to release. Each name is rated by how often names like it sell at auction." />
     <meta name="theme-color" content="#1b1c1d" />
-    <meta name="description" content="Find interesting .ca domains in CIRA's To Be Released list." />
-    <link rel="icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" href="/logo192.png" />
+    <link rel="canonical" href="%REACT_APP_SITE_URL%" />
+
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
-    <title>TBR Check</title>
+
+    <!-- Open Graph / link previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TBR Check" />
+    <meta property="og:locale" content="en_CA" />
+    <meta property="og:url" content="%REACT_APP_SITE_URL%" />
+    <meta property="og:title" content="TBR Check — upcoming .ca domain releases" />
+    <meta property="og:description" content="Score and watch the .ca domains CIRA is about to release." />
+    <meta property="og:image" content="%REACT_APP_SITE_URL%static/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TBR Check logo with example domains and their scores" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TBR Check — upcoming .ca domain releases" />
+    <meta name="twitter:description" content="Score and watch the .ca domains CIRA is about to release." />
+    <meta name="twitter:image" content="%REACT_APP_SITE_URL%static/og-image.png" />
+
+    <!-- schema.org -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "%REACT_APP_SITE_URL%#website",
+            "url": "%REACT_APP_SITE_URL%",
+            "name": "TBR Check",
+            "inLanguage": "en-CA",
+            "publisher": { "@id": "https://pandymic.com/#person" }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "%REACT_APP_SITE_URL%#app",
+            "url": "%REACT_APP_SITE_URL%",
+            "name": "TBR Check",
+            "description": "Score and watch the .ca domains CIRA is about to release. Each name is rated by how often names like it sell at auction.",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript",
+            "inLanguage": "en-CA",
+            "image": "%REACT_APP_SITE_URL%static/og-image.png",
+            "isPartOf": { "@id": "%REACT_APP_SITE_URL%#website" },
+            "creator": { "@id": "https://pandymic.com/#person" }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://pandymic.com/#person",
+            "name": "Michal Pandyra",
+            "url": "https://pandymic.com"
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

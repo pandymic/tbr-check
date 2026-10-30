@@ -25,7 +25,7 @@ const Alerts = ( { onApply } ) => {
       wide="very"
       onOpen={ load }
       trigger={
-        <Button basic icon className="alerts" title="Alerts">
+        <Button basic inverted icon className="alerts" title="Alerts">
           <Icon name={ alerts.unseen ? 'bell' : 'bell outline' } />
           { alerts.unseen > 0 && <Label color="red" floating circular size="mini" content={ alerts.unseen } /> }
         </Button>

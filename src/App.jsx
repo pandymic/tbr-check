@@ -19,6 +19,7 @@ import DomainRow from './components/DomainRow.jsx';
 import FiltersRow from './components/FiltersRow.jsx';
 import Views from './components/Views.jsx';
 import Alerts from './components/Alerts.jsx';
+import Logo from './components/Logo.jsx';
 import './App.css';
 
 const SEARCH_DELAY = 300;
@@ -116,15 +117,17 @@ const App = () => {
   return (
     <Container fluid className={ `App${ showFilters ? ' filters-open' : '' }` }>
       <header className="toolbar">
-        <h1>TBR Check</h1>
+        <Logo />
         <div className="actions">
           <Views query={ query } onApply={ apply } />
-          <Button basic icon="undo" content="Reset" title="Back to upcoming, best first" onClick={ () => apply( DEFAULT_QUERY ) } />
-          <Button basic className="mobile-only" icon="filter" content={ `Filters${ activeFilters ? ` (${activeFilters})` : '' }` } active={ showFilters } onClick={ () => setShowFilters( show => !show ) } />
-          <Button basic icon="download" content="CSV" title="Export this view (up to 10,000 rows)" as="a" href={ `${API}/domains/export.csv?${query}` } />
+          <Button basic inverted icon="undo" content="Reset" title="Back to upcoming, best first" onClick={ () => apply( DEFAULT_QUERY ) } />
+          <Button basic inverted className="mobile-only" icon="filter" content={ `Filters${ activeFilters ? ` (${activeFilters})` : '' }` } active={ showFilters } onClick={ () => setShowFilters( show => !show ) } />
+          <Button basic inverted icon="download" content="CSV" title="Export this view (up to 10,000 rows)" as="a" href={ `${API}/domains/export.csv?${query}` } />
           <Alerts onApply={ apply } />
           <Input
             className="search"
+            inverted
+            transparent
             icon="search"
             loading={ filters.q !== search }
             placeholder="Search..."
