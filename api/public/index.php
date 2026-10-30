@@ -3,260 +3,298 @@
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/../../lib/domains.php';
 
-use Slim\App;
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Http\Server\RequestHandlerInterface as Handler;
+use Slim\Factory\AppFactory;
+use Slim\Routing\RouteCollectorProxy;
 
 $config = include __DIR__ . '/../../etc/config.php';
 $config->now = date( 'Y-m-d H:i:s', $config->time );
 $config->today = date( 'Y-m-d', $config->time );
 
-// The dictionary is ~48k lines; only load it for the routes that need it.
-$wordIndex = function() use ( $config ) {
+$db = new PDO( 'mysql:host=' . $config->db->host . ';dbname=' . $config->db->name, $config->db->user, $config->db->pass );
+$db->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
+
+// The dictionary is ~42k lines; only load it for the routes that need it.
+$wordIndex = function() {
   static $index = null;
-  return $index ?? $index = tbr_load_words( $config->words );
+  return $index ?? $index = tbr_load_words();
 };
 
-$config->db = new PDO( 'mysql:host=' . $config->db->host . ';dbname=' . $config->db->name, $config->db->user, $config->db->pass );
-$config->db->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
+function json( Response $response, $data, $status = 200 ) {
+  $response->getBody()->write( json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+  return $response->withHeader( 'Content-Type', 'application/json' )->withStatus( $status );
+}
 
-$slim = new App( $config->slim->config );
+function body( Request $request ) {
+  $body = $request->getParsedBody();
+  return is_array( $body ) ? $body : [];
+}
 
-$slim->group( '/api/v1', function( $slim ) use ( $config, $wordIndex ) {
+// Rows as returned by the listing, with each word's kind attached.
+function present_domains( PDO $db, array $rows ) {
+  if ( !$rows ) return [];
+  $ids = implode( ',', array_map( function( $row ) { return (int)$row->id; }, $rows ) );
+  $words = [];
+  foreach ( $db->query( "SELECT dw.domain_id, w.word, w.kind FROM domain_words dw JOIN words w ON w.id = dw.word_id WHERE dw.domain_id IN ({$ids}) ORDER BY CHAR_LENGTH( w.word ) DESC, w.zipf DESC", PDO::FETCH_OBJ ) as $w ) {
+    $words[ $w->domain_id ][] = [ 'word' => $w->word, 'kind' => $w->kind ];
+  }
+  return array_map( function( $row ) use ( $words ) {
+    return [
+      'id' => (int)$row->id,
+      'name' => $row->name,
+      'tbr' => $row->tbr,
+      'added' => $row->added,
+      'removed' => $row->removed,
+      'auctioned' => $row->auctioned,
+      'status' => tbr_status( $row ),
+      'flag' => (int)$row->flag,
+      'note' => $row->note,
+      'maxBid' => null === $row->max_bid ? null : (int)$row->max_bid,
+      'score' => null === $row->score ? null : (int)$row->score,
+      'segmented' => (bool)$row->segmented,
+      'segments' => $row->segments,
+      'words' => $words[ $row->id ] ?? [],
+    ];
+  }, $rows );
+}
 
-  $slim->get( '', function( $request, $response, $args ) {
-    return $response->withStatus( 200 )->getBody()->write( 'Hello world!' );
+const DOMAIN_COLUMNS = 'd.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.date_auctioned as auctioned, d.flag, d.note, d.max_bid, d.score, d.segmented, d.segments';
+
+const SORT_SQL = [
+  'id' => [ 'd.id' ],
+  'flag' => [ 'd.flag' ],
+  'name' => [ 'd.domain' ],
+  'added' => [ 'd.date_added' ],
+  'tbr' => [ 'd.date_tbr' ],
+  'score' => [ 'd.score' ],
+  // Same order as sorting the status labels: Auctioned…, Released…, To Be Released.
+  'status' => [ 'CASE WHEN d.date_auctioned IS NOT NULL THEN 0 WHEN d.date_removed IS NOT NULL THEN 1 ELSE 2 END', 'COALESCE( d.date_auctioned, d.date_removed )' ],
+  'words' => [ 'd.word_length' ],
+];
+
+function order_by( array $params ) {
+  $sort = $params['sort'] ?? '';
+  if ( !isset( SORT_SQL[ $sort ] ) ) return 'd.date_removed ASC, d.date_added DESC, d.date_tbr ASC, d.domain ASC, d.id ASC';
+  $dir = 'desc' === strtolower( $params['dir'] ?? '' ) ? 'DESC' : 'ASC';
+  return implode( ', ', array_map( function( $col ) use ( $dir ) { return "{$col} {$dir}"; }, array_merge( SORT_SQL[ $sort ], [ 'd.id' ] ) ) );
+}
+
+// One page of a listing. listed_filter covers every filter and sort column, so filtered lookups never
+// touch table rows; MySQL tends to pick a narrower index, so it's named. Unfiltered pages keep the
+// sorted indexes. Deferred join: page through ids (index-only), then read just those rows.
+function list_domains( PDO $db, array $params, $offset, $limit ) {
+  [ $where, $bind ] = tbr_domain_filters( $db, $params );
+  $whereSql = implode( ' AND ', $where );
+  $index = count( $where ) > 1 ? 'FORCE INDEX ( listed_filter )' : '';
+  $orderBy = order_by( $params );
+  $stmt = $db->prepare( 'SELECT ' . DOMAIN_COLUMNS . " FROM domains d JOIN ( SELECT d.id FROM domains d {$index} WHERE {$whereSql} ORDER BY {$orderBy} LIMIT {$limit} OFFSET {$offset} ) page ON page.id = d.id ORDER BY {$orderBy}" );
+  $stmt->execute( $bind );
+  return $stmt->fetchAll( PDO::FETCH_OBJ );
+}
+
+function count_domains( PDO $db, array $params ) {
+  [ $where, $bind ] = tbr_domain_filters( $db, $params );
+  $stmt = $db->prepare( 'SELECT COUNT(*) FROM domains d FORCE INDEX ( listed_filter ) WHERE ' . implode( ' AND ', $where ) );
+  $stmt->execute( $bind );
+  return (int)$stmt->fetchColumn();
+}
+
+$app = AppFactory::create();
+// Served as /tbr/api.php (rewritten from /tbr/api/…), so the base path is the script's directory.
+$app->setBasePath( rtrim( str_replace( '\\', '/', dirname( $_SERVER['SCRIPT_NAME'] ?? '/' ) ), '/' ) );
+$app->addBodyParsingMiddleware();
+$app->addRoutingMiddleware();
+$slimSettings = (array)( $config->slim->config ?? [] );
+$app->addErrorMiddleware( !empty( $slimSettings['settings']['displayErrorDetails'] ?? $slimSettings['displayErrorDetails'] ?? false ), true, true );
+
+// Writes need $config->apiToken (if set) in X-Api-Token. CORS is only for local dev servers;
+// the production client is same-origin and needs none.
+$app->add( function( Request $request, Handler $handler ) use ( $config ) {
+  $origin = $request->getHeaderLine( 'Origin' );
+  $cors = preg_match( '#^https?://(localhost|127\.0\.0\.1|192\.168\.16\.\d{1,3})(:\d+)?$#', $origin );
+
+  if ( 'OPTIONS' === $request->getMethod() ) {
+    $response = new Slim\Psr7\Response( 204 );
+  } else if ( !in_array( $request->getMethod(), [ 'GET', 'HEAD' ] ) && !empty( $config->apiToken ) && !hash_equals( (string)$config->apiToken, $request->getHeaderLine( 'X-Api-Token' ) ) ) {
+    $response = json( new Slim\Psr7\Response(), [ 'error' => 'Token required' ], 401 );
+  } else {
+    $response = $handler->handle( $request );
+  }
+
+  if ( $cors ) {
+    $response = $response
+      ->withHeader( 'Access-Control-Allow-Origin', $origin )
+      ->withHeader( 'Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS' )
+      ->withHeader( 'Access-Control-Allow-Headers', 'Content-Type, X-Api-Token' )
+      ->withHeader( 'Vary', 'Origin' );
+  }
+  return $response;
+} );
+
+$app->group( '/api/v1', function( RouteCollectorProxy $api ) use ( $db, $config, $wordIndex ) {
+
+  $api->get( '', function( Request $request, Response $response ) {
+    $response->getBody()->write( 'Hello world!' );
+    return $response;
   } );
 
-  $slim->get( '/words', function( $request, $response, $args ) use ( $wordIndex ) {
-    return $response->withJson( array_keys( $wordIndex() ) );
+  // Whether writes need a token, and whether the one sent is valid.
+  $api->get( '/auth', function( Request $request, Response $response ) use ( $config ) {
+    $required = !empty( $config->apiToken );
+    return json( $response, [ 'required' => $required, 'ok' => !$required || hash_equals( (string)$config->apiToken, $request->getHeaderLine( 'X-Api-Token' ) ) ] );
   } );
 
-  // Filtered, sorted, paginated listing.
-  //
-  //   q           Substring search (2+ characters).
-  //   flag        1 = flagged only.
-  //   length      Comma list of domain length tokens: 5, 5- (or less), 5+ (or more).
-  //   wordLength  Same, applied to the longest matched word.
-  //   added       Comma list of YYYY-MM-DD dates added.
-  //   session     Comma list of YYYY-MM-DD TBR session dates.
-  //   status      Comma list of tbr, released, auctioned.
-  //   sort, dir   id|flag|name|added|tbr|status|words, asc|desc. Omit for the default order.
-  //   offset, limit
-  //   count       0 to skip the total (for follow-up pages).
-  $slim->get( '/domains', function( $request, $response, $args ) use ( $config ) {
-
+  // Dictionary lookup for the "contains word" filter: ?prefix=sho&limit=20.
+  // Without a prefix, returns the full list as before.
+  $api->get( '/words', function( Request $request, Response $response ) use ( $db, $wordIndex ) {
     $params = $request->getQueryParams();
-    $list = function( $key ) use ( $params ) {
-      $value = $params[ $key ] ?? '';
-      return array_values( array_filter( is_array( $value ) ? $value : explode( ',', $value ), 'strlen' ) );
-    };
-    $dates = function( $key ) use ( $list ) {
-      return array_values( array_filter( $list( $key ), function( $d ) { return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $d ); } ) );
-    };
+    $prefix = strtolower( preg_replace( '/[^a-z]/i', '', $params['prefix'] ?? '' ) );
+    if ( '' === $prefix ) return json( $response, array_keys( $wordIndex() ) );
+    $limit = min( 50, max( 1, (int)( $params['limit'] ?? 20 ) ) );
+    $stmt = $db->prepare( "SELECT w.word, w.kind, ( SELECT COUNT(*) FROM domain_words dw WHERE dw.word_id = w.id ) AS domains FROM words w WHERE w.word LIKE :prefix ORDER BY w.word = :exact DESC, w.zipf DESC LIMIT {$limit}" );
+    $stmt->execute( [ ':prefix' => $prefix . '%', ':exact' => $prefix ] );
+    return json( $response, array_map( function( $w ) { $w['domains'] = (int)$w['domains']; return $w; }, $stmt->fetchAll( PDO::FETCH_ASSOC ) ) );
+  } );
 
-    $where = [ 'd.listed = 1' ];
-    $bind = [];
-
-    if ( !empty( $params['flag'] ) ) $where[] = 'd.flag = 1';
-
-    $q = trim( $params['q'] ?? '' );
-    if ( strlen( $q ) >= 2 ) {
-      $where[] = 'd.domain LIKE :q';
-      $bind[':q'] = '%' . addcslashes( $q, '%_\\' ) . '%';
-    }
-
-    // Lengths are expanded to an IN () list of integers, so they're safe to inline.
-    if ( null !== $lengths = tbr_length_set( $list( 'length' ), 0, 63 ) ) {
-      $where[] = $lengths ? 'd.domain_length IN (' . implode( ',', array_map( function( $n ) { return $n + 3; }, $lengths ) ) . ')' : '0'; // + ".ca"
-    }
-    if ( null !== $lengths = tbr_length_set( $list( 'wordLength' ), 3, 63 ) ) {
-      $where[] = $lengths ? 'd.word_length IN (' . implode( ',', $lengths ) . ')' : '0';
-    }
-
-    if ( $added = $dates( 'added' ) ) {
-      $or = [];
-      foreach ( $added as $i => $date ) {
-        $or[] = "( d.date_added >= :addedFrom{$i} AND d.date_added < :addedTo{$i} + INTERVAL 1 DAY )";
-        $bind[":addedFrom{$i}"] = $date;
-        $bind[":addedTo{$i}"] = $date;
-      }
-      $where[] = '( ' . implode( ' OR ', $or ) . ' )';
-    }
-
-    if ( $sessions = $dates( 'session' ) ) {
-      $in = [];
-      foreach ( $sessions as $i => $date ) {
-        $in[] = ":session{$i}";
-        $bind[":session{$i}"] = $date;
-      }
-      $where[] = 'd.date_tbr IN (' . implode( ',', $in ) . ')';
-    }
-
-    $statusSql = [
-      'tbr' => '( d.date_auctioned IS NULL AND d.date_removed IS NULL )',
-      'released' => '( d.date_auctioned IS NULL AND d.date_removed IS NOT NULL )',
-      'auctioned' => 'd.date_auctioned IS NOT NULL',
-    ];
-    if ( $status = array_intersect_key( $statusSql, array_flip( $list( 'status' ) ) ) ) {
-      $where[] = '( ' . implode( ' OR ', $status ) . ' )';
-    }
-
-    $sortSql = [
-      'id' => [ 'd.id' ],
-      'flag' => [ 'd.flag' ],
-      'name' => [ 'd.domain' ],
-      'added' => [ 'd.date_added' ],
-      'tbr' => [ 'd.date_tbr' ],
-      // Same order as sorting the status labels: Auctioned…, Released…, To Be Released.
-      'status' => [ 'CASE WHEN d.date_auctioned IS NOT NULL THEN 0 WHEN d.date_removed IS NOT NULL THEN 1 ELSE 2 END', 'COALESCE( d.date_auctioned, d.date_removed )' ],
-      'words' => [ 'd.word_length' ],
-    ];
-    $sort = $params['sort'] ?? '';
-    if ( isset( $sortSql[ $sort ] ) ) {
-      $dir = 'desc' === strtolower( $params['dir'] ?? '' ) ? 'DESC' : 'ASC';
-      $orderBy = implode( ', ', array_map( function( $col ) use ( $dir ) { return "{$col} {$dir}"; }, array_merge( $sortSql[ $sort ], [ 'd.id' ] ) ) );
-    } else {
-      $orderBy = 'd.date_removed ASC, d.date_added DESC, d.date_tbr ASC, d.domain ASC, d.id ASC';
-    }
-
+  // Filtered, sorted, paginated listing. Parameters are documented in README.md.
+  $api->get( '/domains', function( Request $request, Response $response ) use ( $db ) {
+    $params = $request->getQueryParams();
     $offset = max( 0, (int)( $params['offset'] ?? 0 ) );
     $limit = min( 500, max( 1, (int)( $params['limit'] ?? 100 ) ) );
-    $whereSql = implode( ' AND ', $where );
+    $items = present_domains( $db, list_domains( $db, $params, $offset, $limit ) );
+    $total = '0' === ( $params['count'] ?? '1' ) ? null : count_domains( $db, $params );
+    return json( $response, [ 'total' => $total, 'offset' => $offset, 'limit' => $limit, 'items' => $items ] );
+  } );
 
-    // listed_filter covers every filter and sort column, so filtered lookups never touch table rows. MySQL
-    // tends to pick the narrower listed_flag instead, so name it. Unfiltered pages keep the sorted indexes.
-    $filterIndex = 'FORCE INDEX ( listed_filter )';
-    $pageIndex = count( $where ) > 1 ? $filterIndex : '';
+  // Status breakdown for the current filters (ignoring the status filter itself).
+  $api->get( '/domains/stats', function( Request $request, Response $response ) use ( $db ) {
+    [ $where, $bind ] = tbr_domain_filters( $db, $request->getQueryParams(), [ 'status' ] );
+    $stmt = $db->prepare( 'SELECT SUM( d.date_removed IS NULL AND d.date_auctioned IS NULL ), SUM( d.date_removed IS NOT NULL AND d.date_auctioned IS NULL ), SUM( d.date_auctioned IS NOT NULL ) FROM domains d FORCE INDEX ( listed_filter ) WHERE ' . implode( ' AND ', $where ) );
+    $stmt->execute( $bind );
+    [ $upcoming, $released, $auctioned ] = array_map( 'intval', $stmt->fetch( PDO::FETCH_NUM ) );
+    $past = $released + $auctioned;
+    return json( $response, [ 'upcoming' => $upcoming, 'released' => $released, 'auctioned' => $auctioned, 'auctionRate' => $past ? round( $auctioned / $past, 4 ) : null ] );
+  } );
 
-    // Deferred join: page through ids (index-only), then read just those rows.
-    $selectStmt = $config->db->prepare( "SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.date_auctioned as auctioned, d.flag, d.words FROM domains d JOIN ( SELECT d.id FROM domains d {$pageIndex} WHERE {$whereSql} ORDER BY {$orderBy} LIMIT {$limit} OFFSET {$offset} ) page ON page.id = d.id ORDER BY {$orderBy}" );
-    $selectStmt->execute( $bind );
-    $domainList = $selectStmt->fetchAll( PDO::FETCH_OBJ );
-
-    foreach ( $domainList as $domain ) {
-      $domain->id = (int)$domain->id;
-      $domain->flag = (int)$domain->flag;
-      if ( null !== $domain->words ) {
-        $domain->words = explode( ',', $domain->words );
-      } else {
-        unset( $domain->words );
-      }
-      if ( !empty( $domain->auctioned ) ) {
-        $domain->status = 'Auctioned ' . $domain->auctioned;
-      } else if ( !empty( $domain->removed ) ) {
-        $domain->status = 'Released ' . $domain->removed;
-      } else {
-        $domain->status = 'To Be Released';
-      }
+  // The current view as CSV (up to 10,000 rows).
+  $api->get( '/domains/export.csv', function( Request $request, Response $response ) use ( $db ) {
+    $rows = present_domains( $db, list_domains( $db, $request->getQueryParams(), 0, 10000 ) );
+    $out = fopen( 'php://temp', 'r+' );
+    fputcsv( $out, [ 'domain', 'score', 'words', 'session', 'added', 'status', 'flag', 'max_bid', 'note' ], ',', '"', '' );
+    foreach ( $rows as $row ) {
+      fputcsv( $out, [ $row['name'], $row['score'], implode( ' ', array_column( $row['words'], 'word' ) ), $row['tbr'], $row['added'], $row['status'], $row['flag'], $row['maxBid'], $row['note'] ], ',', '"', '' );
     }
-
-    $total = null;
-    if ( '0' !== ( $params['count'] ?? '1' ) ) {
-      $countStmt = $config->db->prepare( "SELECT COUNT(*) FROM domains d {$filterIndex} WHERE {$whereSql}" );
-      $countStmt->execute( $bind );
-      $total = (int)$countStmt->fetchColumn();
-    }
-
-    return $response->withJson( [ 'total' => $total, 'offset' => $offset, 'limit' => $limit, 'items' => $domainList ] );
+    rewind( $out );
+    $response->getBody()->write( stream_get_contents( $out ) );
+    return $response
+      ->withHeader( 'Content-Type', 'text/csv; charset=utf-8' )
+      ->withHeader( 'Content-Disposition', 'attachment; filename="tbr-domains-' . date( 'Y-m-d' ) . '.csv"' );
   } );
 
   // Option lists for the date filters. Changes at most a few times a day.
-  $slim->get( '/domains/facets', function( $request, $response, $args ) use ( $config ) {
-    return $response
-      ->withHeader( 'Cache-Control', 'public, max-age=300' )
-      ->withJson( [
-        'added' => $config->db->query( 'SELECT DISTINCT DATE( date_added ) FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
-        'session' => $config->db->query( 'SELECT DISTINCT date_tbr FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
-      ] );
+  $api->get( '/domains/facets', function( Request $request, Response $response ) use ( $db ) {
+    return json( $response, [
+      'added' => $db->query( 'SELECT DISTINCT DATE( date_added ) FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
+      'session' => $db->query( 'SELECT DISTINCT date_tbr FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
+    ] )->withHeader( 'Cache-Control', 'public, max-age=300' );
   } );
 
-  $slim->get( '/domains/{id:[0-9]+}/words', function( $request, $response, $args ) use ( $config, $wordIndex ) {
-
-    $domainId = $args['id'];
-
-    $selectStmt = $config->db->prepare('SELECT id, domain as name FROM domains WHERE id = :id');
-    $selectStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
-    $selectStmt->execute();
-    $domain = $selectStmt->fetch(PDO::FETCH_OBJ);
-
-    if ( $domain ) {
-      if ( $words = tbr_match_words( $domain->name, $wordIndex() ) ) $domain->words = $words;
-      return $response->withJson( $domain );
-    }
-    return $response->withStatus(404, 'Domain not found');
+  $api->get( '/domains/{id:[0-9]+}/words', function( Request $request, Response $response, array $args ) use ( $db, $wordIndex ) {
+    $stmt = $db->prepare( 'SELECT id, domain as name FROM domains WHERE id = :id' );
+    $stmt->execute( [ ':id' => $args['id'] ] );
+    $domain = $stmt->fetch( PDO::FETCH_OBJ );
+    if ( !$domain ) return json( $response, [ 'error' => 'Domain not found' ], 404 );
+    $index = $wordIndex();
+    $domain->words = array_map( function( $word ) use ( $index ) { return [ 'word' => $word, 'kind' => $index[ $word ]['kind'] ]; }, array_keys( tbr_match_words( $domain->name, $index ) ) );
+    return json( $response, $domain );
   } );
 
-  $slim->map( [ 'GET', 'PATCH', 'PUT', 'DELETE' ], '/domains/{id:[0-9]+}', function( $request, $response, $args ) use ( $config, $wordIndex ) {
+  $api->get( '/domains/{id:[0-9]+}', function( Request $request, Response $response, array $args ) use ( $db ) {
+    $stmt = $db->prepare( 'SELECT ' . DOMAIN_COLUMNS . ' FROM domains d WHERE d.id = :id' );
+    $stmt->execute( [ ':id' => $args['id'] ] );
+    $rows = $stmt->fetchAll( PDO::FETCH_OBJ );
+    return $rows ? json( $response, present_domains( $db, $rows )[0] ) : json( $response, [ 'error' => 'Domain not found' ], 404 );
+  } );
 
-    $method = $request->getMethod();
-    $domainId = $args['id'];
+  // Watchlist fields: any of { flag, note, maxBid }.
+  $api->patch( '/domains/{id:[0-9]+}', function( Request $request, Response $response, array $args ) use ( $db ) {
+    $body = body( $request );
+    $set = [];
+    $bind = [ ':id' => $args['id'] ];
+    if ( array_key_exists( 'flag', $body ) ) { $set[] = 'flag = :flag'; $bind[':flag'] = $body['flag'] ? 1 : 0; }
+    if ( array_key_exists( 'note', $body ) ) { $set[] = 'note = :note'; $bind[':note'] = '' === trim( (string)$body['note'] ) ? null : trim( (string)$body['note'] ); }
+    if ( array_key_exists( 'maxBid', $body ) ) { $set[] = 'max_bid = :max_bid'; $bind[':max_bid'] = is_numeric( $body['maxBid'] ) && $body['maxBid'] >= 0 ? (int)$body['maxBid'] : null; }
+    if ( !$set ) return json( $response, [ 'error' => 'Nothing to update' ], 400 );
+    $db->prepare( 'UPDATE domains SET ' . implode( ', ', $set ) . ' WHERE id = :id' )->execute( $bind );
+    return $response->withStatus( 204 );
+  } );
 
-    switch ( $method ) {
-      case 'GET':
+  // Replace a domain's core fields; derived columns and word links are recomputed.
+  $api->put( '/domains/{id:[0-9]+}', function( Request $request, Response $response, array $args ) use ( $db, $wordIndex ) {
+    $body = body( $request );
+    if ( empty( $body['name'] ) || empty( $body['tbr'] ) ) return json( $response, [ 'error' => 'name and tbr are required' ], 400 );
+    $f = tbr_domain_fields( $body['name'], $wordIndex() );
+    $db->beginTransaction();
+    $db->prepare( 'UPDATE domains SET domain = :domain, domain_length = :domain_length, has_dashes = :has_dashes, has_numbers = :has_numbers, words = :words, word_length = :word_length, score = :score, segmented = :segmented, segments = :segments, kinds = :kinds, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed, flag = :flag WHERE id = :id' )->execute( [
+      ':domain' => $f->domain, ':domain_length' => $f->domain_length, ':has_dashes' => $f->has_dashes, ':has_numbers' => $f->has_numbers,
+      ':words' => $f->words, ':word_length' => $f->word_length, ':score' => $f->score, ':segmented' => $f->segmented, ':segments' => $f->segments, ':kinds' => $f->kinds,
+      ':date_tbr' => $body['tbr'], ':date_added' => $body['added'] ?? null, ':date_removed' => $body['removed'] ?? null, ':flag' => empty( $body['flag'] ) ? 0 : 1, ':id' => $args['id'],
+    ] );
+    $listed = !$f->has_dashes && !$f->has_numbers && $f->domain_length < 13;
+    tbr_store_domain_words( $db, (int)$args['id'], $listed ? $f->matches : [], tbr_word_ids( $db ) );
+    $db->commit();
+    return $response->withStatus( 204 );
+  } );
 
-        $selectStmt = $config->db->prepare('SELECT id, domain as name, date_tbr as tbr, date_added as added, date_removed as removed, flag FROM domains WHERE id = :id');
-        $selectStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
-        $selectStmt->execute();
-        $domain = $selectStmt->fetch(PDO::FETCH_OBJ);
+  // Saved searches: { name, query (the listing's query string), alert }.
+  $api->get( '/searches', function( Request $request, Response $response ) use ( $db ) {
+    $rows = $db->query( 'SELECT id, name, query, alert, created FROM saved_searches ORDER BY name' )->fetchAll( PDO::FETCH_ASSOC );
+    return json( $response, array_map( function( $s ) { $s['id'] = (int)$s['id']; $s['alert'] = (bool)$s['alert']; return $s; }, $rows ) );
+  } );
 
-        if ( $domain ) {
-          return $response->withJson( $domain );
-        }
-        return $response->withStatus(404, 'Domain not found');
-      case 'PATCH':
+  $api->post( '/searches', function( Request $request, Response $response ) use ( $db, $config ) {
+    $body = body( $request );
+    $name = trim( (string)( $body['name'] ?? '' ) );
+    if ( '' === $name ) return json( $response, [ 'error' => 'name is required' ], 400 );
+    $db->prepare( 'INSERT INTO saved_searches (name, query, alert, created) VALUES (?, ?, ?, ?)' )
+      ->execute( [ mb_substr( $name, 0, 100 ), substr( (string)( $body['query'] ?? '' ), 0, 2000 ), empty( $body['alert'] ) ? 0 : 1, $config->now ] );
+    return json( $response, [ 'id' => (int)$db->lastInsertId() ], 201 );
+  } );
 
-        // Flag toggle only; doesn't need the rest of the record.
-        $parsedBody = $request->getParsedBody();
+  $api->patch( '/searches/{id:[0-9]+}', function( Request $request, Response $response, array $args ) use ( $db ) {
+    $body = body( $request );
+    $set = [];
+    $bind = [ ':id' => $args['id'] ];
+    if ( isset( $body['name'] ) && '' !== trim( $body['name'] ) ) { $set[] = 'name = :name'; $bind[':name'] = mb_substr( trim( $body['name'] ), 0, 100 ); }
+    if ( isset( $body['query'] ) ) { $set[] = 'query = :query'; $bind[':query'] = substr( (string)$body['query'], 0, 2000 ); }
+    if ( array_key_exists( 'alert', $body ) ) { $set[] = 'alert = :alert'; $bind[':alert'] = $body['alert'] ? 1 : 0; }
+    if ( !$set ) return json( $response, [ 'error' => 'Nothing to update' ], 400 );
+    $db->prepare( 'UPDATE saved_searches SET ' . implode( ', ', $set ) . ' WHERE id = :id' )->execute( $bind );
+    return $response->withStatus( 204 );
+  } );
 
-        if ( isset( $parsedBody['flag'] ) ) {
-          $flag = $parsedBody['flag'] ? 1 : 0;
-          $updateStmt = $config->db->prepare('UPDATE domains SET flag = :flag WHERE id = :id');
-          $updateStmt->bindParam(':flag', $flag, PDO::PARAM_INT);
-          $updateStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
-          $updateStmt->execute();
-          return $response->withStatus(204);
-        }
-        return $response->withStatus(400, 'Bad Request');
-      case 'PUT':
+  $api->delete( '/searches/{id:[0-9]+}', function( Request $request, Response $response, array $args ) use ( $db ) {
+    $db->prepare( 'DELETE FROM saved_searches WHERE id = ?' )->execute( [ $args['id'] ] );
+    return $response->withStatus( 204 );
+  } );
 
-        $parsedBody = $request->getParsedBody();
+  // Recent alerts, newest first, plus the unseen count.
+  $api->get( '/alerts', function( Request $request, Response $response ) use ( $db ) {
+    $limit = min( 100, max( 1, (int)( $request->getQueryParams()['limit'] ?? 30 ) ) );
+    $items = $db->query( "SELECT a.id, a.created, a.type, a.message, a.seen, a.search_id, s.query, d.domain FROM alerts a LEFT JOIN saved_searches s ON s.id = a.search_id LEFT JOIN domains d ON d.id = a.domain_id ORDER BY a.created DESC, a.id DESC LIMIT {$limit}" )->fetchAll( PDO::FETCH_ASSOC );
+    $unseen = (int)$db->query( 'SELECT COUNT(*) FROM alerts WHERE seen = 0' )->fetchColumn();
+    return json( $response, [ 'unseen' => $unseen, 'items' => array_map( function( $a ) {
+      return [ 'id' => (int)$a['id'], 'created' => $a['created'], 'type' => $a['type'], 'message' => $a['message'], 'seen' => (bool)$a['seen'], 'query' => $a['query'], 'domain' => $a['domain'] ];
+    }, $items ) ] );
+  } );
 
-        if ( !empty( $parsedBody['name'] ) && !empty( $parsedBody['tbr'] )  ) {
-
-          $fields = tbr_domain_fields( $parsedBody['name'], $wordIndex() );
-
-          $updateStmt = $config->db->prepare('UPDATE domains SET domain = :domain, domain_length = :domain_length, has_dashes = :has_dashes, has_numbers = :has_numbers, words = :words, word_length = :word_length, date_tbr = :date_tbr, date_added = :date_added, date_removed = :date_removed, flag = :flag WHERE id = :id');
-          $updateStmt->bindParam(':domain', $fields->domain);
-          $updateStmt->bindParam(':domain_length', $fields->domain_length, PDO::PARAM_INT);
-          $updateStmt->bindParam(':has_dashes', $fields->has_dashes, PDO::PARAM_INT);
-          $updateStmt->bindParam(':has_numbers', $fields->has_numbers, PDO::PARAM_INT);
-          $updateStmt->bindParam(':words', $fields->words);
-          $updateStmt->bindParam(':word_length', $fields->word_length, PDO::PARAM_INT);
-          $updateStmt->bindParam(':date_tbr', $parsedBody['tbr']);
-          $updateStmt->bindParam(':date_added', $parsedBody['added']);
-          $updateStmt->bindParam(':date_removed', $parsedBody['removed']);
-          $updateStmt->bindParam(':flag', $parsedBody['flag'], PDO::PARAM_INT);
-          $updateStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
-          $updateStmt->execute();
-          return $response->withStatus(204); // 204 No Content on successful update
-        }
-        return $response->withStatus(400, 'Bad Request');
-      case 'DELETE':
-
-        $deleteStmt = $config->db->prepare('DELETE FROM domains WHERE id = :id');
-        $deleteStmt->bindParam(':id', $domainId, PDO::PARAM_INT);
-        $deleteStmt->execute();
-        return $response->withStatus(204); // 204 No Content on successful delete
-    }
-
-    return $response->withStatus(405, 'Method Not Allowed'); // Handle unsupported methods
+  $api->post( '/alerts/seen', function( Request $request, Response $response ) use ( $db ) {
+    $db->exec( 'UPDATE alerts SET seen = 1 WHERE seen = 0' );
+    return $response->withStatus( 204 );
   } );
 
 } );
 
-if ( preg_match( '/^192\.168\.16\.[\d]{1,3}$/', $_SERVER['REMOTE_ADDR'] ) ) {
-  header( 'Access-Control-Allow-Origin: *' );
-  header( 'Access-Control-Allow-Methods: *' );
-  header( 'Access-Control-Allow-Headers: *' );
-}
-
-$slim->run();
+$app->run();

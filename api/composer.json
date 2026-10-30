@@ -2,7 +2,8 @@
     "name": "pandymic/tbr-check-api",
     "type": "project",
     "require": {
-        "slim/slim": "3.*"
+        "slim/slim": "^4.14",
+        "slim/psr7": "^1.7"
     },
     "authors": [
         {
