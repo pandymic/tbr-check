@@ -34,7 +34,7 @@ try {
 
   $results = $selectStmt->fetchAll(PDO::FETCH_OBJ);
   $upcoming_domains = array_map( function( $row ) {
-    return (object)[ 'name' => $row->domain, 'date' => $row->date_tbr, 'id' => $row->id ];
+    return (object)[ 'name' => $row->domain, 'date' => $row->date_tbr, 'id' => $row->id, 'flag' => $row->flag ];
   }, $results );
 
   $tbrCmd = escapeshellcmd( $config->tbrCmd );
@@ -43,14 +43,19 @@ try {
   $tbr_domains = json_decode( $tbr_response );
 
   // Prepare insert statement
-  $wordIndex = tbr_load_words( $config->words );
-  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, domain_length, has_dashes, has_numbers, words, word_length, date_tbr, date_added) VALUES (:domain, :domain_length, :has_dashes, :has_numbers, :words, :word_length, :date_tbr, :now)');
+  $wordIndex = tbr_load_words();
+  $wordIds = tbr_word_ids( $db );
+  $insertStmt = $db->prepare('INSERT IGNORE INTO domains (domain, domain_length, has_dashes, has_numbers, words, word_length, score, segmented, segments, kinds, date_tbr, date_added) VALUES (:domain, :domain_length, :has_dashes, :has_numbers, :words, :word_length, :score, :segmented, :segments, :kinds, :date_tbr, :now)');
   $insertStmt->bindParam(':domain', $domain);
   $insertStmt->bindParam(':domain_length', $domain_length, PDO::PARAM_INT );
   $insertStmt->bindParam(':has_dashes', $has_dashes, PDO::PARAM_INT );
   $insertStmt->bindParam(':has_numbers', $has_numbers, PDO::PARAM_INT );
   $insertStmt->bindParam(':words', $words );
   $insertStmt->bindParam(':word_length', $word_length, PDO::PARAM_INT );
+  $insertStmt->bindParam(':score', $score, PDO::PARAM_INT );
+  $insertStmt->bindParam(':segmented', $segmented, PDO::PARAM_INT );
+  $insertStmt->bindParam(':segments', $segments );
+  $insertStmt->bindParam(':kinds', $kinds );
   $insertStmt->bindParam(':date_tbr', $date_tbr);
   $insertStmt->bindParam(':now', $config->now );
 
@@ -74,8 +79,15 @@ try {
     $has_numbers = $fields->has_numbers;
     $words = $fields->words;
     $word_length = $fields->word_length;
+    $score = $fields->score;
+    $segmented = $fields->segmented;
+    $segments = $fields->segments;
+    $kinds = $fields->kinds;
     $date_tbr = $tbr_domain->date;
     $insertStmt->execute();
+    if ( $insertStmt->rowCount() && !$has_dashes && !$has_numbers && $domain_length < 13 ) {
+      tbr_store_domain_words( $db, (int)$db->lastInsertId(), $fields->matches, $wordIds );
+    }
     $log->added[] = 'Added ' . $domain . ' - ' . $date_tbr;
   }
 
@@ -92,6 +104,7 @@ try {
     $updateStmt->execute();
     
     $log->removed[] = 'Removed ' . $upcoming_domain->name . ' - ' . $upcoming_domain->date;
+    if ( $upcoming_domain->flag ) tbr_alert( $db, $config, 'status', "Watched domain {$upcoming_domain->name} was released.", $upcoming_domain->id );
   }
 
   $resultsCmd = escapeshellcmd( $config->resultsCmd );
@@ -144,6 +157,10 @@ try {
 
                     $auctionedStmt = $db->prepare('UPDATE domains SET date_auctioned = GREATEST(COALESCE(date_auctioned, :date_released), :date_released_max) WHERE id = :id');
                     $auctionedStmt->execute([':date_released' => $releaseDate, ':date_released_max' => $releaseDate, ':id' => $domainId]);
+
+                    $flagStmt = $db->prepare('SELECT flag FROM domains WHERE id = :id');
+                    $flagStmt->execute([':id' => $domainId]);
+                    if ($flagStmt->fetchColumn()) tbr_alert($db, $config, 'status', "Watched domain {$domain->domainName} sold at auction.", $domainId);
                 }
 
             } catch (PDOException $e) {
@@ -157,6 +174,8 @@ try {
     }
 
   }
+
+  tbr_search_alerts( $db, $config, $config->now );
 
   print 'Database updated successfully';
 } catch(PDOException $e) {
