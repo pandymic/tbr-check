@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Checkbox,
   Container,
   Dimmer,
   Input,
@@ -14,12 +15,13 @@ import {
 } from 'semantic-ui-react';
 import { API, getJson, send } from './api.js';
 import { buildQuery, countFilters, DEFAULT_QUERY, parseQuery } from './query.js';
-import { useDomains, useNearViewport, useStats } from './hooks.js';
+import { CHUNK_SIZE, useDomains, useNearViewport, useStats, useStoredState } from './hooks.js';
 import DomainRow from './components/DomainRow.jsx';
 import FiltersRow from './components/FiltersRow.jsx';
 import Views from './components/Views.jsx';
 import Alerts from './components/Alerts.jsx';
 import Logo from './components/Logo.jsx';
+import Footer from './components/Footer.jsx';
 import './App.css';
 
 const SEARCH_DELAY = 300;
@@ -33,6 +35,32 @@ const columns = [
   { key: 'added', label: 'Added' },
   { key: 'status', label: 'Status' },
 ];
+
+const canObserve = 'undefined' !== typeof window && 'IntersectionObserver' in window;
+
+// Table footer: progress, the next chunk (button or automatic), and the auto-load preference.
+const Pager = ( { shown, total, hasMore, loadingMore, loadMore, autoLoad, setAutoLoad, sentinel } ) => {
+  const remaining = Math.max( 0, ( total ?? 0 ) - shown );
+  const percent = total ? Math.min( 100, Math.round( shown / total * 100 ) ) : 100;
+  const manual = !autoLoad || !canObserve;
+  return (
+    <div className="pager">
+      <div className="pager-progress">
+        <span>Showing <b>{ shown.toLocaleString() }</b> of <b>{ ( total ?? 0 ).toLocaleString() }</b></span>
+        <div className="bar" role="progressbar" aria-valuenow={ percent } aria-valuemin="0" aria-valuemax="100"><div style={ { width: `${percent}%` } } /></div>
+      </div>
+      <div className="pager-next" ref={ sentinel }>
+        { loadingMore && <Loader active inline size="small" /> }
+        { !loadingMore && hasMore && manual && (
+          <Button basic size="small" icon="angle double down" onClick={ loadMore } content={ `Load ${Math.min( CHUNK_SIZE, remaining ).toLocaleString()} more` } title={ `${remaining.toLocaleString()} remaining` } />
+        ) }
+        { !loadingMore && hasMore && !manual && <span className="hint">Loading more as you scroll</span> }
+        { !hasMore && shown > 0 && <span className="hint">End of list</span> }
+      </div>
+      <Checkbox toggle className="pager-mode" label="Auto-load" checked={ autoLoad } onChange={ ( e, { checked } ) => setAutoLoad( checked ) } title="Load the next rows automatically as you scroll" />
+    </div>
+  );
+};
 
 const fromLocation = () => parseQuery( window.location.search.slice( 1 ) || DEFAULT_QUERY );
 
@@ -56,13 +84,14 @@ const App = () => {
   const [ sort, setSort ] = useState( initial.sort );
   // Search text applied to the query; trails the input by SEARCH_DELAY.
   const [ search, setSearch ] = useState( initial.filters.q );
-  const [ facets, setFacets ] = useState( { added: [], session: [] } );
+  const [ facets, setFacets ] = useState( { added: [], session: [], updated: null, nextSession: null, lastAuction: null } );
   const [ showFilters, setShowFilters ] = useState( false );
+  const [ autoLoad, setAutoLoad ] = useStoredState( 'tbr-auto-load', true );
 
   const query = useMemo( () => buildQuery( filters, sort, search ), [ filters, sort, search ] );
   const { items, total, status, loadingMore, hasMore, loadMore, updateItem } = useDomains( query );
   const stats = useStats( query );
-  const sentinel = useNearViewport( loadMore, hasMore );
+  const sentinel = useNearViewport( loadMore, hasMore && autoLoad );
 
   useEffect( () => {
     const timer = setTimeout( () => setSearch( filters.q ), SEARCH_DELAY );
@@ -167,13 +196,16 @@ const App = () => {
             <TableFooter>
               <TableRow>
                 <TableHeaderCell colSpan={ columns.length }>
-                  <div className="pager">
-                    <div ref={ sentinel }>
-                      { loadingMore && <Loader active inline size="small" /> }
-                      { !loadingMore && hasMore && <Button basic size="small" content="Load more" onClick={ loadMore } /> }
-                    </div>
-                    <div>Showing { items.length.toLocaleString() } of { ( total ?? 0 ).toLocaleString() }</div>
-                  </div>
+                  <Pager
+                    shown={ items.length }
+                    total={ total }
+                    hasMore={ hasMore }
+                    loadingMore={ loadingMore }
+                    loadMore={ loadMore }
+                    autoLoad={ autoLoad }
+                    setAutoLoad={ setAutoLoad }
+                    sentinel={ sentinel }
+                  />
                 </TableHeaderCell>
               </TableRow>
             </TableFooter>
@@ -191,10 +223,7 @@ const App = () => {
         </div>
         )
       }
-      <footer className="footer">
-        <span>{ ready && null !== total && `${total.toLocaleString()} domains` }</span>
-        <a href="https://pandymic.com">pandymic.com</a>
-      </footer>
+      <Footer facets={ facets } />
     </Container>
   );
 };

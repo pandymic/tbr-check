@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import App from './App.jsx';
 import { buildQuery, DEFAULT_QUERY, parseQuery } from './query.js';
@@ -25,9 +26,10 @@ const respond = body => Promise.resolve( { ok: true, status: 200, json: () => Pr
 
 beforeEach( () => {
   window.history.replaceState( null, '', '/' );
+  localStorage.clear();
   global.fetch = vi.fn( url => {
     const { pathname, searchParams } = new URL( url, 'http://localhost' );
-    if ( pathname.endsWith( '/facets' ) ) return respond( { added: [ '2026-10-30' ], session: [ '2026-11-04' ] } );
+    if ( pathname.endsWith( '/facets' ) ) return respond( { added: [ '2026-10-30' ], session: [ '2026-11-04' ], updated: '2026-10-30 01:47:21', nextSession: '2026-11-04', lastAuction: '2026-10-28 12:00:00' } );
     if ( pathname.endsWith( '/stats' ) ) return respond( { upcoming: 150, released: 900, auctioned: 100, auctionRate: 0.1 } );
     if ( pathname.endsWith( '/searches' ) ) return respond( [] );
     if ( pathname.endsWith( '/alerts' ) ) return respond( { unseen: 0, items: [] } );
@@ -46,26 +48,29 @@ afterEach( () => {
   vi.useRealTimers();
 } );
 
+// "Showing <b>100</b> of <b>150</b>" spans several nodes.
+const showing = text => ( _, el ) => 'SPAN' === el?.tagName && el.textContent === text;
+
 const listRequests = () => fetch.mock.calls.map( ( [ url ] ) => url ).filter( url => /\/domains\?/.test( url ) );
 
 test( 'opens on upcoming domains, best first, and loads the rest on demand', async () => {
   render( <App /> );
 
-  expect( await screen.findByText( 'Showing 100 of 150' ) ).toBeInTheDocument();
+  expect( await screen.findByText( showing( 'Showing 100 of 150' ) ) ).toBeInTheDocument();
   expect( listRequests()[ 0 ] ).toContain( `${DEFAULT_QUERY}&offset=0&limit=100` );
   expect( window.location.search ).toBe( `?${DEFAULT_QUERY}` );
   expect( screen.getByText( '10.0%' ) ).toBeInTheDocument();
 
-  fireEvent.click( screen.getByText( 'Load more' ) );
+  fireEvent.click( screen.getByText( 'Load 50 more' ) );
 
-  expect( await screen.findByText( 'Showing 150 of 150' ) ).toBeInTheDocument();
+  expect( await screen.findByText( showing( 'Showing 150 of 150' ) ) ).toBeInTheDocument();
   expect( listRequests()[ 1 ] ).toContain( 'offset=100&limit=100&count=0' );
 } );
 
 test( 'debounces search into a single request and keeps it in the URL', async () => {
   vi.useFakeTimers( { shouldAdvanceTime: true } );
   render( <App /> );
-  await screen.findByText( 'Showing 100 of 150' );
+  await screen.findByText( showing( 'Showing 100 of 150' ) );
 
   const input = screen.getByPlaceholderText( 'Search...' );
   fireEvent.change( input, { target: { value: 'ex' } } );
@@ -79,11 +84,27 @@ test( 'debounces search into a single request and keeps it in the URL', async ()
 
 test( 'clicking a word filters by it', async () => {
   render( <App /> );
-  await screen.findByText( 'Showing 100 of 150' );
+  await screen.findByText( showing( 'Showing 100 of 150' ) );
 
   fireEvent.click( screen.getAllByText( 'example', { selector: 'a' } )[ 0 ] );
 
   await waitFor( () => expect( listRequests().at( -1 ) ).toContain( 'word=example' ) );
+} );
+
+test( 'remembers the auto-load preference', async () => {
+  render( <App /> );
+  await screen.findByText( showing( 'Showing 100 of 150' ) );
+
+  userEvent.click( screen.getByText( 'Auto-load' ) );
+  expect( localStorage.getItem( 'tbr-auto-load' ) ).toBe( 'false' );
+  expect( screen.getByText( 'Load 50 more' ) ).toBeInTheDocument();
+} );
+
+test( 'shows data freshness and credits in the footer', async () => {
+  render( <App /> );
+  expect( await screen.findByText( 'Next session' ) ).toBeInTheDocument();
+  expect( screen.getByText( 'wordfreq' ) ).toHaveAttribute( 'href', 'https://github.com/rspeer/wordfreq' );
+  expect( screen.getByText( /^v\d+\.\d+\.\d+$/ ) ).toBeInTheDocument();
 } );
 
 test( 'query strings round-trip', () => {
@@ -99,6 +120,8 @@ test( 'formats relative dates and auction odds', () => {
   expect( relative( '2026-11-04', now ) ).toBe( 'in 5 days' );
   expect( relative( '2026-10-29', now ) ).toBe( 'yesterday' );
   expect( relative( '2026-10-30 09:00:00', now ) ).toBe( '3 hours ago' );
+  expect( relative( '2026-10-30 11:40:00', now ) ).toBe( '20 minutes ago' );
+  expect( relative( '2026-10-30 11:59:50', now ) ).toBe( 'just now' );
   expect( auctionOdds( 80 ) ).toBeCloseTo( 0.398, 2 );
   expect( auctionOdds( 50 ) ).toBeCloseTo( 0.1, 3 );
 } );

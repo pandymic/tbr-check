@@ -9,13 +9,14 @@ export const shortDate = ( value, now = new Date() ) => {
   return date.toLocaleDateString( 'en-CA', { month: 'short', day: 'numeric', year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric' } );
 };
 
-// "3 hours ago", "yesterday", "in 5 days", "2 months ago".
+// "just now", "20 minutes ago", "3 hours ago", "yesterday", "in 5 days", "2 months ago".
 export const relative = ( value, now = new Date() ) => {
   const date = parseDate( value );
   const diff = date - now;
   if ( value.length > 10 && Math.abs( diff ) < DAY ) {
-    const hours = Math.round( diff / 3600000 );
-    return 0 === hours ? 'just now' : rtf.format( hours, 'hour' );
+    const minutes = Math.round( diff / 60000 );
+    if ( 0 === minutes ) return 'just now';
+    return Math.abs( minutes ) < 60 ? rtf.format( minutes, 'minute' ) : rtf.format( Math.round( minutes / 60 ), 'hour' );
   }
   const midnight = new Date( now.getFullYear(), now.getMonth(), now.getDate() );
   const day = new Date( date.getFullYear(), date.getMonth(), date.getDate() );

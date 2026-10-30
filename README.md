@@ -166,7 +166,7 @@ All routes are under `/api/v1`. Reads are open. Writes (`POST`, `PATCH`, `PUT`, 
 | `GET /domains` | Filtered, sorted, paginated listing (see below) |
 | `GET /domains/stats` | `{ upcoming, released, auctioned, auctionRate }` for the same filters, ignoring `status` |
 | `GET /domains/export.csv` | The same listing as CSV, up to 10,000 rows |
-| `GET /domains/facets` | `{ added: [dates], session: [dates] }` for the date filters. Cached for 5 minutes. |
+| `GET /domains/facets` | `{ added, session, updated, nextSession, lastAuction }`: date options for the filters, plus data freshness for the footer. Cached for 5 minutes. |
 | `GET /domains/{id}` | One domain, in the listing's shape |
 | `PATCH /domains/{id}` | Any of `{ flag, note, maxBid }` |
 | `PUT /domains/{id}` | Replace `name`, `tbr`, `added`, `removed`, `flag`. Recomputes derived data. |
@@ -240,7 +240,9 @@ To run the client against a different API, set `REACT_APP_BACKEND_API`, e.g. `RE
 - **Watchlist.** A checkbox watches a domain; the note icon adds a note and a max bid.
 - **Export.** *CSV* downloads the current view.
 - **WHOIS.** Hover a domain for a WHOIS link.
-- **Chunked loading.** Rows load 100 at a time, prefetched 800px before the end, with a *Load more* fallback. Search is debounced, stale requests are cancelled, and flag changes are optimistic.
+- **Chunked loading.** Rows load 100 at a time. With the *Auto-load* toggle in the table footer on (the default), the next chunk is prefetched 800px before the end. With it off, a *Load 100 more* button does it instead. The choice is remembered per browser. A progress bar shows how much of the list is loaded.
+- **Request hygiene.** Search is debounced, stale requests are cancelled, and flag changes are optimistic.
+- **Footer.** Shows when the data was last updated, the next TBR session and the last auction (from `/domains/facets`), the app version, and data credits.
 - **Layout.**
   - Desktop: the column headers stay pinned while scrolling.
   - Small screens: rows become labelled cards, and the filters fold into a toggle.

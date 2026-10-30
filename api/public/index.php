@@ -193,11 +193,16 @@ $app->group( '/api/v1', function( RouteCollectorProxy $api ) use ( $db, $config,
       ->withHeader( 'Content-Disposition', 'attachment; filename="tbr-domains-' . date( 'Y-m-d' ) . '.csv"' );
   } );
 
-  // Option lists for the date filters. Changes at most a few times a day.
-  $api->get( '/domains/facets', function( Request $request, Response $response ) use ( $db ) {
+  // Option lists for the date filters, plus data freshness. Changes at most a few times a day.
+  $api->get( '/domains/facets', function( Request $request, Response $response ) use ( $db, $config ) {
+    $next = $db->prepare( 'SELECT MIN( date_tbr ) FROM domains WHERE listed = 1 AND date_tbr >= ? AND date_removed IS NULL' );
+    $next->execute( [ $config->today ] );
     return json( $response, [
       'added' => $db->query( 'SELECT DISTINCT DATE( date_added ) FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
       'session' => $db->query( 'SELECT DISTINCT date_tbr FROM domains WHERE listed = 1 ORDER BY 1 DESC' )->fetchAll( PDO::FETCH_COLUMN ),
+      'updated' => $db->query( 'SELECT MAX( date_added ) FROM domains' )->fetchColumn() ?: null,
+      'nextSession' => $next->fetchColumn() ?: null,
+      'lastAuction' => $db->query( 'SELECT MAX( date_released ) FROM results' )->fetchColumn() ?: null,
     ] )->withHeader( 'Cache-Control', 'public, max-age=300' );
   } );
 

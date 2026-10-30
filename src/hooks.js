@@ -88,3 +88,23 @@ export const useNearViewport = ( callback, enabled ) => {
   }, [ callback, enabled ] );
   return ref;
 };
+
+// useState that persists in localStorage (UI preferences, not view state).
+export const useStoredState = ( key, initial ) => {
+  const [ value, setValue ] = useState( () => {
+    try {
+      const stored = localStorage.getItem( key );
+      return null === stored ? initial : JSON.parse( stored );
+    } catch {
+      return initial;
+    }
+  } );
+  useEffect( () => {
+    try {
+      localStorage.setItem( key, JSON.stringify( value ) );
+    } catch {
+      // Private mode or storage full: keep the in-memory value.
+    }
+  }, [ key, value ] );
+  return [ value, setValue ];
+};

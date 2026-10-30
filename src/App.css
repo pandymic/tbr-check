@@ -238,11 +238,48 @@ tr:hover a.whois {
 }
 
 .pager {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
-  min-height: 2.25em;
+  min-height: 2.5em;
+}
+
+.pager-progress {
+  display: flex;
+  flex-direction: column;
+  gap: .35em;
+}
+
+.pager-progress .bar {
+  width: 10rem;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(34,36,38,.1);
+  overflow: hidden;
+}
+
+.pager-progress .bar > div {
+  height: 100%;
+  background: #D52B1E;
+  transition: width .3s ease;
+}
+
+.pager-next {
+  display: flex;
+  justify-content: center;
+}
+
+.pager-next .ui.button {
+  margin: 0;
+}
+
+.pager .hint {
+  color: rgba(0,0,0,.45);
+}
+
+.pager .pager-mode {
+  justify-self: end;
 }
 
 .watch-editor textarea {
@@ -256,11 +293,85 @@ tr:hover a.whois {
   min-height: 50vh;
 }
 
-.footer {
+/* Footer: bookends the header. */
+
+.site-footer {
+  margin: 2rem -1rem -1rem;
+  padding: 1.25rem 1rem 1rem;
+  background: #1b1c1d;
+  border-top: 3px solid #D52B1E;
+  color: rgba(255,255,255,.7);
+  font-size: .95rem;
+}
+
+.site-footer a {
+  color: rgba(255,255,255,.85);
+}
+
+.site-footer a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.site-footer-main {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  color: rgba(0,0,0,.6);
+  gap: 1rem 2rem;
+}
+
+.site-footer .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.site-footer .version {
+  padding: .1em .45em;
+  border-radius: 3px;
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.6);
+  font-size: .75rem;
+}
+
+.site-footer .freshness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 2rem;
+  margin: 0;
+}
+
+.site-footer .freshness dt {
+  color: rgba(255,255,255,.45);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.site-footer .freshness dd {
+  margin: 0;
+  color: #fff;
+}
+
+.site-footer .links {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.site-footer .credits {
+  margin: 1rem 0 0;
+  padding-top: .85rem;
+  border-top: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.45);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.site-footer .credits a {
+  color: rgba(255,255,255,.65);
 }
 
 /* Small screens: each row becomes a labelled card. */
@@ -397,6 +508,26 @@ tr:hover a.whois {
   }
 
   .pager {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .pager .pager-mode {
+    justify-self: center;
+  }
+
+  .pager-progress {
+    align-items: center;
+  }
+
+  .site-footer {
+    margin: 2rem -.5rem -1rem;
+    padding: 1.25rem .75rem 1rem;
+  }
+
+  .site-footer-main {
     flex-direction: column;
+    align-items: flex-start;
   }
 }
