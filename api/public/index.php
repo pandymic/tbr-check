@@ -122,8 +122,13 @@ $slim->group( '/api/v1', function( $slim ) use ( $config, $wordIndex ) {
     $limit = min( 500, max( 1, (int)( $params['limit'] ?? 100 ) ) );
     $whereSql = implode( ' AND ', $where );
 
+    // listed_filter covers every filter and sort column, so filtered lookups never touch table rows. MySQL
+    // tends to pick the narrower listed_flag instead, so name it. Unfiltered pages keep the sorted indexes.
+    $filterIndex = 'FORCE INDEX ( listed_filter )';
+    $pageIndex = count( $where ) > 1 ? $filterIndex : '';
+
     // Deferred join: page through ids (index-only), then read just those rows.
-    $selectStmt = $config->db->prepare( "SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.date_auctioned as auctioned, d.flag, d.words FROM domains d JOIN ( SELECT d.id FROM domains d WHERE {$whereSql} ORDER BY {$orderBy} LIMIT {$limit} OFFSET {$offset} ) page ON page.id = d.id ORDER BY {$orderBy}" );
+    $selectStmt = $config->db->prepare( "SELECT d.id, d.domain as name, d.date_tbr as tbr, d.date_added as added, d.date_removed as removed, d.date_auctioned as auctioned, d.flag, d.words FROM domains d JOIN ( SELECT d.id FROM domains d {$pageIndex} WHERE {$whereSql} ORDER BY {$orderBy} LIMIT {$limit} OFFSET {$offset} ) page ON page.id = d.id ORDER BY {$orderBy}" );
     $selectStmt->execute( $bind );
     $domainList = $selectStmt->fetchAll( PDO::FETCH_OBJ );
 
@@ -146,7 +151,7 @@ $slim->group( '/api/v1', function( $slim ) use ( $config, $wordIndex ) {
 
     $total = null;
     if ( '0' !== ( $params['count'] ?? '1' ) ) {
-      $countStmt = $config->db->prepare( "SELECT COUNT(*) FROM domains d WHERE {$whereSql}" );
+      $countStmt = $config->db->prepare( "SELECT COUNT(*) FROM domains d {$filterIndex} WHERE {$whereSql}" );
       $countStmt->execute( $bind );
       $total = (int)$countStmt->fetchColumn();
     }
